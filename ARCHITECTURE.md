@@ -116,16 +116,12 @@ get_updater().get_tick() ─→ 内存 _ticks 缓存 (120s TTL)
 用户选择大盘 + 领域
     │
     ▼
-discover_all_stocks() 获取标的列表
-  ├── 优先: Wikipedia 实时拉取指数成分股 (20s timeout)
-  ├── 回退: 内置扩展列表
-  ├── 美股: S&P 500 (~500 只) + NASDAQ 100
-  ├── A股: CSI 300 (~300 只)
-  ├── 港股: 恒生指数 (~80 只)
-  └── 日股: 日经 225 (~225 只)
-  │
-  ▼
-  缓存 24h (data/exchange_stocks.json)
+discover_all_stocks() 多源获取标的列表
+  ├── Wikipedia (S&P 500, NASDAQ 100, Russell 1000, CSI 300, CSI 500, HSI, HSCEI, Nikkei 225, TOPIX)
+  ├── yfinance holdings API
+  ├── DuckDuckGo/Bing 搜索 (fallback)
+  └── 内置扩展回退列表
+  美股: ~500+ | A股: ~300+ | 港股: ~80+ | 日股: ~225+
     │
     ▼
 queue_symbols() 加入后台更新队列
