@@ -109,4 +109,12 @@ StockTracing/
 - **AI**: OpenAI 兼容 API
 - **资讯**: DuckDuckGo 搜索
 
+## 免责声明
+
+本系统仅供学习与研究目的使用。所有股票数据来源于 Yahoo Finance，AI 分析结论仅供参考，不构成任何投资建议。使用者应独立判断并承担投资风险。作者不对因使用本系统产生的任何投资损失负责。
+
+## 许可
+
+[MIT License](LICENSE)
+
 [详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
