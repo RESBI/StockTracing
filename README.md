@@ -109,6 +109,8 @@ StockTracing/
 - **AI**: OpenAI 兼容 API
 - **资讯**: DuckDuckGo 搜索
 
+[详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
+
 ## 免责声明
 
 本系统仅供学习与研究目的使用。
@@ -120,5 +122,3 @@ StockTracing/
 ## 许可
 
 [MIT License](LICENSE)
-
-[详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
