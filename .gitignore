@@ -1,0 +1,10 @@
+data/config.json
+data/stocktracing.db
+data/watchlist.json
+data/trades.json
+data/news_cache/
+data/exchange_stocks.json
+__pycache__/
+*.pyc
+.venv/
+venv/

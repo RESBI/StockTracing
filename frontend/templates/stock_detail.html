@@ -1,0 +1,478 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-6">
+        <a href="/" class="text-mute hover:text-text text-sm">&larr; 仪表盘</a>
+        <h1 class="text-xl font-bold" id="stock-title">{{ symbol }}</h1>
+        <button onclick="refreshAll()" class="btn btn-outline btn-sm ml-auto">刷新</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-0 border-b border-bord mb-6" id="tabs">
+        <span class="tab active" data-tab="overview">概览</span>
+        <span class="tab" data-tab="chart">图表</span>
+        <span class="tab" data-tab="technical">技术指标</span>
+        <span class="tab" data-tab="analyst">机构评级</span>
+        <span class="tab" data-tab="financials">财报</span>
+        <span class="tab" data-tab="news">资讯</span>
+        <span class="tab" data-tab="ai">AI分析</span>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="text-center py-16">
+        <div class="spinner spinner-lg mx-auto mb-4"></div>
+        <p class="text-mute text-sm">正在加载 {{ symbol }} 完整分析...</p>
+    </div>
+
+    <!-- Content Panels -->
+    <div id="detail-content" class="hidden">
+        <!-- Overview -->
+        <div id="panel-overview" class="tab-panel">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" id="overview-cards"></div>
+            <div class="card p-4 mb-6" id="key-metrics"></div>
+        </div>
+
+        <!-- Chart -->
+        <div id="panel-chart" class="tab-panel hidden">
+            <div class="card p-4 mb-6">
+                <div class="flex gap-2 mb-4">
+                    <button class="btn btn-outline btn-xs" onclick="loadChart('1mo')">1月</button>
+                    <button class="btn btn-outline btn-xs" onclick="loadChart('3mo')">3月</button>
+                    <button class="btn btn-acc btn-xs" id="btn-6mo" onclick="loadChart('6mo')">6月</button>
+                    <button class="btn btn-outline btn-xs" onclick="loadChart('1y')">1年</button>
+                </div>
+                <div style="position:relative;height:380px;">
+                    <canvas id="price-chart"></canvas>
+                </div>
+            </div>
+            <div class="card p-4">
+                <h3 class="font-semibold text-sm mb-3 text-mute uppercase tracking-wide">技术指标概览</h3>
+                <div id="tech-snapshot" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+            </div>
+        </div>
+
+        <!-- Technical -->
+        <div id="panel-technical" class="tab-panel hidden">
+            <div class="card p-4 mb-6">
+                <h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">技术信号</h3>
+                <div id="signals-list" class="space-y-2"></div>
+            </div>
+            <div class="card p-4">
+                <h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">指标详情</h3>
+                <div id="indicators-detail" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+
+        <!-- Analyst -->
+        <div id="panel-analyst" class="tab-panel hidden">
+            <div class="card p-4 mb-6" id="analyst-targets"></div>
+            <div class="card p-4 mb-6" id="analyst-ratings"></div>
+            <div class="card p-4" id="analyst-changes"></div>
+        </div>
+
+        <!-- Financials -->
+        <div id="panel-financials" class="tab-panel hidden">
+            <div id="financials-content"></div>
+        </div>
+
+        <!-- News -->
+        <div id="panel-news" class="tab-panel hidden">
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-sm text-mute uppercase tracking-wide">最新资讯 & 研究报告</h3>
+                    <button id="news-load-btn" class="btn btn-acc btn-sm" onclick="loadNews()">加载资讯</button>
+                </div>
+                <div id="news-status" class="text-center py-6 text-mute text-sm">点击"加载资讯"获取最新新闻</div>
+                <div id="news-list" class="space-y-3 hidden"></div>
+            </div>
+        </div>
+
+        <!-- AI -->
+        <div id="panel-ai" class="tab-panel hidden">
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-sm text-mute uppercase tracking-wide">AI 分析总结</h3>
+                    <button id="ai-refresh-btn" class="btn btn-acc btn-sm" onclick="refreshAI()">刷新分析</button>
+                </div>
+                <div id="ai-current"></div>
+                <div class="mt-6 pt-4 border-t border-bord">
+                    <h4 class="text-xs font-semibold text-mute uppercase tracking-wide mb-3">历史分析记录</h4>
+                    <div id="ai-history">
+                        <p class="text-mute text-sm text-center py-4">点击"刷新分析"生成第一条记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const SYMBOL='{{ symbol }}';
+let allData={};
+let priceChart=null;
+
+function diffPrice(oldS,newS){
+    if(!oldS||oldS===newS)return{prefix:newS,changed:'',suffix:''};
+    let i=0;
+    while(i<oldS.length&&i<newS.length&&oldS[i]===newS[i])i++;
+    let jOld=oldS.length,jNew=newS.length;
+    while(jOld>i&&jNew>i&&oldS[jOld-1]===newS[jNew-1]){jOld--;jNew--;}
+    return{prefix:newS.slice(0,i),changed:newS.slice(i,jNew),suffix:newS.slice(jNew)};
+}
+
+// Tab switching
+let newsLoaded=false, aiHistoryLoaded=false;
+document.getElementById('tabs').addEventListener('click',e=>{
+    if(!e.target.classList.contains('tab'))return;
+    document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.remove('active'));
+    e.target.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
+    const panel=document.getElementById('panel-'+e.target.dataset.tab);
+    if(panel)panel.classList.remove('hidden');
+    if(e.target.dataset.tab==='chart'){
+        if(priceChart){priceChart.resize();}else{loadChart('6mo');}
+    }
+    if(e.target.dataset.tab==='ai'&&!aiHistoryLoaded){
+        loadAIHistory();
+        aiHistoryLoaded=true;
+    }
+});
+
+async function refreshAll(){
+    document.getElementById('detail-content').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
+    allData=await api('/stock/'+SYMBOL+'/full?refresh=true');
+    renderAll();
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('detail-content').classList.remove('hidden');
+}
+
+async function loadAll(){
+    showLoading();
+    try{
+        allData=await api('/stock/'+SYMBOL+'/full');
+        renderAll();
+    }catch(e){
+        document.getElementById('loading').innerHTML=`<p class="text-down">加载失败: ${e.message}</p>`;
+        hideLoading();
+        return;
+    }
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('detail-content').classList.remove('hidden');
+    hideLoading();
+}
+
+function renderAll(){
+    const info=allData.info||{};
+    document.getElementById('stock-title').textContent=info.symbol+' — '+(info.name||'');
+
+    renderOverview(info,allData.analyst||{},allData.technical||{});
+    renderSignals(allData.technical);
+    renderIndicatorsDetail(allData.technical);
+    renderAnalyst(allData.analyst||{},info);
+    renderFinancials(allData.financials||{});
+    renderAI(allData.summary||{});
+    newsLoaded=false;
+    aiHistoryLoaded=false;
+}
+
+function renderOverview(info,analyst,tech){
+    const chg=fmtChg(info.current_price,info.previous_close);
+    const upside=analyst.upside_percent;
+    const upsideStr=upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—';
+    const rec=info.recommendation||analyst.recommendation||'—';
+
+    document.getElementById('overview-cards').innerHTML=`
+        <div class="card p-5 lg:col-span-2">
+            <div class="flex items-start justify-between mb-3">
+                <div>
+                    <h2 class="text-2xl font-bold">${info.symbol}</h2>
+                    <p class="text-mute text-sm">${info.name||''}</p>
+                    <p class="text-mute text-xs mt-0.5">${info.sector||''}${info.industry?' · '+info.industry:''}</p>
+                </div>
+                <span class="tag ${rec.toLowerCase().includes('buy')?'tag-up':rec.toLowerCase().includes('sell')?'tag-down':'tag-warn'}">${rec}</span>
+            </div>
+            <div class="flex items-baseline gap-3 mb-4">
+                <span class="text-4xl font-bold price-cell price-up" id="detail-price" data-price="${info.current_price||''}">
+                    <span class="price-slide-in">${fmtPrice(info.current_price)}</span>
+                </span>
+                <span class="${chg.up?'up':'down'} text-lg font-medium">${chg.v}</span>
+            </div>
+            <div class="grid grid-cols-4 md:grid-cols-6 gap-3 text-sm">
+                ${kv('日高',fmtPrice(info.day_high))}${kv('日低',fmtPrice(info.day_low))}
+                ${kv('前收',fmtPrice(info.previous_close))}${kv('52周高',fmtPrice(info.fifty_two_week_high))}
+                ${kv('52周低',fmtPrice(info.fifty_two_week_low))}${kv('成交量',fmtNum(info.volume,0))}
+            </div>
+        </div>
+        <div class="card p-5">
+            <h3 class="text-xs font-semibold text-mute uppercase tracking-wide mb-4">关键指标</h3>
+            ${kv2('市值',fmtNum(info.market_cap))}${kv2('PE市盈率',info.pe_ratio?.toFixed(1)||'—')}
+            ${kv2('EPS',info.eps?.toFixed(2)||'—')}${kv2('Beta',info.beta?.toFixed(2)||'—')}
+            ${kv2('股息率',info.dividend_yield?(info.dividend_yield*100).toFixed(2)+'%':'—')}
+            ${kv2('目标价空间',`<span class="${upside>0?'up':upside<0?'down':''}">${upsideStr}</span>`)}
+        </div>`;
+
+    // Key metrics row
+    const sigs=tech.signals||[];
+    const buyN=sigs.filter(s=>s.signal==='buy').length;
+    const sellN=sigs.filter(s=>s.signal==='sell').length;
+    document.getElementById('key-metrics').innerHTML=`
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            ${metricCard('分析师覆盖',String(analyst.number_of_analysts||0)+'位','#848E9C')}
+            ${metricCard('买入信号',String(buyN),buyN>sellN?'#00B887':'#848E9C')}
+            ${metricCard('卖出信号',String(sellN),sellN>buyN?'#F54D4D':'#848E9C')}
+            ${metricCard('综合建议',buyN>sellN?'偏多':sellN>buyN?'偏空':'中性',buyN>sellN?'#00B887':sellN>buyN?'#F54D4D':'#F59E0B')}
+        </div>`;
+}
+
+function metricCard(label,val,color){
+    return `<div class="bg-bg rounded-lg p-3"><p class="text-xs text-mute mb-1">${label}</p><p class="text-xl font-bold" style="color:${color}">${val}</p></div>`;
+}
+
+function kv(label,value){return `<div><span class="text-mute block text-xs">${label}</span><span class="font-medium text-sm">${value}</span></div>`;}
+function kv2(label,value){return `<div class="flex justify-between py-1.5 border-b border-bord/40 last:border-0 text-sm"><span class="text-mute">${label}</span><span class="font-medium">${value}</span></div>`;}
+
+function renderSignals(tech){
+    const sigs=tech.signals||[];
+    document.getElementById('signals-list').innerHTML=sigs.length?sigs.map(s=>`
+        <div class="bg-bg border border-bord rounded-lg p-3 flex items-center justify-between">
+            <div><span class="font-medium text-sm">${s.indicator}</span><p class="text-xs text-mute mt-0.5">${s.detail}</p></div>
+            <span class="tag ${tagCls(s.signal)}">${signalLabel(s.signal)}</span>
+        </div>`).join(''):'<p class="text-mute text-sm">暂无技术信号数据</p>';
+}
+
+function renderIndicatorsDetail(tech){
+    const cont=document.getElementById('indicators-detail');
+    let html='';
+    if(tech.rsi!=null)html+=kv2('RSI (14)',Number(tech.rsi).toFixed(1));
+    if(tech.macd){
+        html+=kv2('MACD线',tech.macd.macd_line!=null?Number(tech.macd.macd_line).toFixed(4):'—');
+        html+=kv2('MACD信号线',tech.macd.signal_line!=null?Number(tech.macd.signal_line).toFixed(4):'—');
+        html+=kv2('MACD柱',tech.macd.histogram!=null?Number(tech.macd.histogram).toFixed(4):'—');
+    }
+    if(tech.bollinger){
+        html+=kv2('布林上轨',tech.bollinger.upper!=null?fmtPrice(tech.bollinger.upper):'—');
+        html+=kv2('布林中轨',tech.bollinger.middle!=null?fmtPrice(tech.bollinger.middle):'—');
+        html+=kv2('布林下轨',tech.bollinger.lower!=null?fmtPrice(tech.bollinger.lower):'—');
+    }
+    html+=kv2('最新价',fmtPrice(tech.latest_price));
+    cont.innerHTML=html?`<div class="bg-bg rounded-lg p-4">${html}</div>`:'<p class="text-mute text-sm">暂无指标详情</p>';
+}
+
+function renderAnalyst(analyst,info){
+    const tgt=document.getElementById('analyst-targets');
+    const rat=document.getElementById('analyst-ratings');
+    const chg=document.getElementById('analyst-changes');
+
+    const upside=analyst.upside_percent;
+    tgt.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">目标价预测</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            ${kv2('当前价',fmtPrice(info.current_price))}
+            ${kv2('目标均价',fmtPrice(analyst.target_mean))}
+            ${kv2('目标高价',fmtPrice(analyst.target_high))}
+            ${kv2('目标低价',fmtPrice(analyst.target_low))}
+            ${kv2('上涨空间','<span class="'+(upside>0?'up':upside<0?'down':'')+'">'+(upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—')+'</span>')}
+        </div>`;
+
+    const ratings=analyst.recent_ratings||[];
+    rat.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">近期评级 (${ratings.length}条)</h3>`;
+    if(ratings.length){
+        rat.innerHTML+=`<div class="space-y-1">${ratings.map(r=>`
+            <div class="flex justify-between text-sm py-1.5 border-b border-bord/30 last:border-0">
+                <span class="text-mute">${r.firm||'—'}</span>
+                <span>${r.action||'—'}</span>
+                <span class="text-mute text-xs">${r.date||''}</span>
+            </div>`).join('')}</div>`;
+    }else{rat.innerHTML+='<p class="text-mute text-sm">暂无数据</p>';}
+
+    const changes=analyst.upgrades_downgrades||[];
+    chg.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">评级调级 (${changes.length}条)</h3>`;
+    if(changes.length){
+        chg.innerHTML+=`<div class="space-y-1">${changes.map(r=>{
+            const isUp=r.action?.toLowerCase().includes('up');
+            return `<div class="flex justify-between text-sm py-1.5 border-b border-bord/30 last:border-0">
+                <span class="text-mute">${r.firm||'—'}</span>
+                <span>${r.from_grade||''} → ${r.to_grade||''}</span>
+                <span class="${isUp?'up':'down'} text-xs font-medium">${r.action||''}</span>
+            </div>`;
+        }).join('')}</div>`;
+    }else{chg.innerHTML+='<p class="text-mute text-sm">暂无数据</p>';}
+}
+
+function renderFinancials(fin){
+    const cont=document.getElementById('financials-content');
+    const sections=[
+        {key:'income_statement',label:'利润表 (年度)',icon:'📊'},
+        {key:'balance_sheet',label:'资产负债表 (年度)',icon:'📋'},
+        {key:'cash_flow',label:'现金流量表 (年度)',icon:'💰'},
+    ];
+    let html='';
+    sections.forEach(sec=>{
+        const items=fin[sec.key]||[];
+        html+=`<div class="card p-4 mb-4"><h3 class="font-semibold text-sm mb-3">${sec.icon} ${sec.label} (${items.length}条)</h3>`;
+        if(!items.length){html+='<p class="text-mute text-sm">暂无数据</p></div>';return;}
+        items.slice(0,3).forEach((item,idx)=>{
+            html+=`<details class="bg-bg rounded-lg mb-2">
+                <summary class="px-3 py-2 cursor-pointer text-sm font-medium">${item.period||'Period '+(idx+1)}</summary>
+                <div class="px-3 pb-3 grid grid-cols-2 gap-x-4">`;
+            Object.entries(item).filter(([k])=>k!=='period').forEach(([k,v])=>{
+                let dv=v;
+                if(typeof v==='number'){
+                    dv=Math.abs(v)>=1e9?'$'+(v/1e9).toFixed(2)+'B':
+                        Math.abs(v)>=1e6?'$'+(v/1e6).toFixed(2)+'M':v.toFixed(0);
+                }
+                html+=`<div class="flex justify-between text-xs py-1 border-b border-bord/20"><span class="text-mute">${k}</span><span>${dv}</span></div>`;
+            });
+            html+=`</div></details>`;
+        });
+        html+=`</div>`;
+    });
+    cont.innerHTML=html||'<div class="card p-4"><p class="text-mute text-sm">暂无财报数据</p></div>';
+}
+
+async function loadNews(){
+    const btn=document.getElementById('news-load-btn');
+    const status=document.getElementById('news-status');
+    const list=document.getElementById('news-list');
+    btn.disabled=true;
+    btn.textContent='加载中...';
+    status.classList.remove('hidden');
+    status.innerHTML='<div class="spinner mx-auto mb-2"></div><span>正在搜索最新资讯...</span>';
+    try{
+        const news=await api('/stock/'+SYMBOL+'/news?refresh=true');
+        if(!news||!news.length){
+            status.innerHTML='<span class="text-mute">未找到相关资讯</span>';
+            list.classList.add('hidden');
+        }else{
+            status.classList.add('hidden');
+            list.classList.remove('hidden');
+            list.innerHTML=news.map(n=>`
+                <a href="${n.url||'#'}" target="_blank" rel="noopener" class="block bg-bg border border-bord rounded-lg p-3 hover:border-acc/30 transition-colors">
+                    <p class="font-medium text-sm mb-1">${n.title||'无标题'}</p>
+                    <p class="text-xs text-mute line-clamp-2 mb-1.5">${n.snippet||''}</p>
+                    <div class="flex items-center gap-3 text-xs text-mute">
+                        ${n.source?`<span>${n.source}</span>`:''}
+                        ${n.date?`<span>${n.date}</span>`:''}
+                    </div>
+                </a>`).join('');
+            newsLoaded=true;
+        }
+    }catch(e){
+        status.innerHTML=`<span class="text-down">加载失败: ${e.message}</span>`;
+    }
+    btn.disabled=false;
+    btn.textContent='加载资讯';
+}
+
+function renderAI(summary){
+    const cont=document.getElementById('ai-current');
+    if(!summary||!summary.enabled||!summary.summary){
+        cont.innerHTML=`<p class="text-mute text-sm">${(summary&&summary.summary)||'LLM未配置。在 data/config.json 中配置 api_key 后可用。'}</p>`;
+        return;
+    }
+    const cached=summary.cached?'<span class="tag tag-mute ml-2">缓存</span>':'';
+    const text=(summary.summary||'').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong style="color:#93C5FD">$1</strong>');
+    cont.innerHTML=`<div class="prose-sm" style="color:#CBD5E1">${text}</div>`;
+}
+
+async function refreshAI(){
+    const btn=document.getElementById('ai-refresh-btn');
+    btn.disabled=true;
+    btn.textContent='分析中...';
+    try{
+        const s=await api('/stock/'+SYMBOL+'/summary');
+        renderAI(s);
+        aiHistoryLoaded=false;
+        loadAIHistory();
+    }catch(e){
+        document.getElementById('ai-current').innerHTML=`<p class="text-down text-sm">AI分析失败: ${e.message}</p>`;
+    }
+    btn.disabled=false;
+    btn.textContent='刷新分析';
+}
+
+async function loadAIHistory(){
+    const cont=document.getElementById('ai-history');
+    cont.innerHTML='<div class="text-center py-2"><div class="spinner mx-auto mb-1"></div></div>';
+    try{
+        const rows=await api('/stock/'+SYMBOL+'/ai-history');
+        if(!rows||!rows.length){
+            cont.innerHTML='<p class="text-mute text-sm text-center py-2">暂无历史分析记录</p>';
+            return;
+        }
+        aiHistoryLoaded=true;
+        cont.innerHTML=rows.map((r,i)=>{
+            const ts=r.created_at?r.created_at.replace('T',' ').substring(0,19):'';
+            const text=(r.content||'').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong style="color:#93C5FD">$1</strong>');
+            return`<details class="bg-bg rounded-lg mb-2" ${i===0?'open':''}>
+                <summary class="px-3 py-2 cursor-pointer text-sm text-mute">
+                    ${i===0?'<span class="tag tag-acc mr-2">最新</span>':''}
+                    分析时间: ${ts}
+                </summary>
+                <div class="px-3 pb-3 prose-sm" style="color:#CBD5E1">${text}</div>
+            </details>`;
+        }).join('');
+    }catch(e){
+        cont.innerHTML=`<p class="text-down text-sm">加载历史失败: ${e.message}</p>`;
+    }
+}
+
+async function loadChart(period){
+    document.querySelectorAll('#panel-chart .btn-xs').forEach(b=>{b.className='btn btn-outline btn-xs';});
+    const map={'1mo':'btn-1mo','3mo':'btn-3mo','6mo':'btn-6mo','1y':'btn-1y'};
+    const id=map[period];if(id)document.getElementById(id).className='btn btn-acc btn-xs';
+    try{var hist=await api('/stock/'+SYMBOL+'/history?period='+period);}catch(e){return;}
+    const labels=hist.map(d=>d.date);
+    const closes=hist.map(d=>d.close);
+    const ctx=document.getElementById('price-chart').getContext('2d');
+    if(priceChart)priceChart.destroy();
+    const isUp=closes.length>=2&&closes[closes.length-1]>=closes[0];
+    priceChart=new Chart(ctx,{
+        type:'line',data:{labels,datasets:[{label:'Close',data:closes,borderColor:isUp?'#00B887':'#F54D4D',backgroundColor:(isUp?'#00B887':'#F54D4D')+'10',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+            plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1}},
+            scales:{x:{ticks:{color:'#4A5466',maxTicksLimit:8},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466',callback:v=>'$'+v.toFixed(2)},grid:{color:'#1A2030'}}}}});
+}
+
+loadAll();
+
+let detailPriceTimer=null;
+async function refreshPriceOnly(){
+    try{
+        const d=await api('/stock/'+SYMBOL);
+        const el=document.getElementById('detail-price');
+        if(!el)return;
+        const prev=parseFloat(el.getAttribute('data-price')||el.textContent.replace('$',''));
+        const cur=d.current_price;
+        if(isNaN(prev)||cur==null||prev===cur)return;
+
+        el.classList.remove('price-flash-up','price-flash-down','price-up','price-down');
+        void el.offsetWidth;
+        const dir=cur>prev?'price-up':'price-down';
+        el.classList.add(dir,cur>prev?'price-flash-up':'price-flash-down');
+        el.setAttribute('data-price',String(cur));
+
+        const inner=el.querySelector('.price-slide-in');
+        if(inner){
+            const oldStr=el.textContent.replace(/\s/g,'');
+            const newStr=fmtPrice(cur);
+            if(oldStr!==newStr){
+                const diff=diffPrice(oldStr,newStr);
+                let html='';
+                if(diff.prefix)html+=`<span class="price-prefix">${diff.prefix}</span>`;
+                if(diff.changed)html+=`<span class="price-slide-in">${diff.changed}</span>`;
+                if(diff.suffix)html+=`<span class="price-suffix">${diff.suffix}</span>`;
+                if(!diff.prefix&&!diff.changed&&!diff.suffix)html=`<span class="price-slide-in">${newStr}</span>`;
+                el.innerHTML=html;
+                const newInner=el.querySelector('.price-slide-in');
+                if(newInner){newInner.style.animation='none';void newInner.offsetWidth;newInner.style.animation='';}
+            }
+        }
+    }catch(e){}
+}
+detailPriceTimer=setInterval(refreshPriceOnly,1000);
+</script>
+{% endblock %}

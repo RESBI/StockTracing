@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block nav_scan %}text-text bg-white/5{% endblock %}
+{% block content %}
+<div class="p-6">
+    <h1 class="text-xl font-bold mb-1">技术扫描</h1>
+    <p class="text-sm text-mute mb-6">批量扫描自选股票，查看买卖信号矩阵</p>
+
+    <div class="card p-4 mb-6">
+        <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-sm uppercase tracking-wide text-mute">扫描自选股</h2>
+            <button class="btn btn-acc btn-sm" onclick="runScan()">开始扫描</button>
+        </div>
+    </div>
+
+    <!-- Summary bar -->
+    <div id="scan-summary" class="hidden mb-4"></div>
+
+    <!-- Results table -->
+    <div class="card p-4">
+        <div id="scan-results">
+            <p class="text-mute text-sm text-center py-8">点击"开始扫描"分析自选股技术信号</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function runScan(){
+    const cont=document.getElementById('scan-results');
+    cont.innerHTML='<div class="text-center py-8"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">正在扫描...</p></div>';
+
+    let syms=[];
+    try{syms=(await api('/watchlist')).symbols;}catch(e){cont.innerHTML='<p class="text-down text-sm">获取自选列表失败</p>';return;}
+    if(!syms.length){cont.innerHTML='<p class="text-mute text-sm text-center py-8">自选列表为空，请先在仪表盘添加股票</p>';return;}
+
+    const results=[];
+    for(const sym of syms){
+        try{
+            const info=await api('/stock/'+sym);
+            const tech=await api('/stock/'+sym+'/technical');
+            const analyst=await api('/stock/'+sym+'/analyst');
+            results.push({sym,info,tech,analyst,ok:true});
+        }catch(e){results.push({sym,ok:false,err:e.message});}
+    }
+
+    const score=r=>{
+        if(!r.ok)return-999;
+        const s=r.tech.signals||[];
+        return s.filter(x=>x.signal==='buy').length-s.filter(x=>x.signal==='sell').length;
+    };
+    results.sort((a,b)=>score(b)-score(a));
+
+    // Summary
+    const okResults=results.filter(r=>r.ok);
+    const buyCount=okResults.filter(r=>score(r)>0).length;
+    const sellCount=okResults.filter(r=>score(r)<0).length;
+    const neutralCount=okResults.filter(r=>score(r)===0).length;
+    document.getElementById('scan-summary').classList.remove('hidden');
+    document.getElementById('scan-summary').innerHTML=`
+        <div class="grid grid-cols-4 gap-3">
+            <div class="card p-3 text-center"><p class="text-xs text-mute mb-1">总计</p><p class="text-xl font-bold">${okResults.length}</p></div>
+            <div class="card p-3 text-center"><p class="text-xs text-mute mb-1">偏多</p><p class="text-xl font-bold up">${buyCount}</p></div>
+            <div class="card p-3 text-center"><p class="text-xs text-mute mb-1">偏空</p><p class="text-xl font-bold down">${sellCount}</p></div>
+            <div class="card p-3 text-center"><p class="text-xs text-mute mb-1">中性</p><p class="text-xl font-bold warn">${neutralCount}</p></div>
+        </div>`;
+
+    // Table
+    const header='<thead><tr>'+['代码','价格','涨跌','PE','RSI','MACD','布林带','Stoch','MA交叉','量','综合'].map(h=>`<th>${h}</th>`).join('')+'</thead>';
+    let body='';
+    results.forEach(r=>{
+        if(!r.ok){body+=`<tr><td><span class="text-down text-sm">${r.sym}</span></td><td colspan="10" class="text-mute text-xs">${r.err}</td></tr>`;return;}
+        const{sym,info,tech,analyst}=r;
+        const chg=fmtChg(info.current_price,info.previous_close);
+        const sigs=tech.signals||[];
+        function scell(name){
+            const s=sigs.find(x=>x.indicator===name);
+            if(!s)return'<td><span class="text-mute">—</span></td>';
+            if(s.signal==='neutral')return'<td><span class="tag tag-warn">中</span></td>';
+            return`<td><span class="tag ${tagCls(s.signal)}">${s.signal==='buy'?'买':'卖'}</span></td>`;
+        }
+        const comp=sigs.find(x=>x.indicator==='综合评分');
+        const compTag=comp?`<span class="tag ${tagCls(comp.signal)}">${signalLabel(comp.signal)}</span>`:'<span class="text-mute">—</span>';
+        body+=`<tr class="cursor-pointer hover:bg-bg/50" onclick="location.href='/stock/${sym}'">
+            <td><span class="font-medium text-sm" style="color:#296BEF">${sym}</span></td>
+            <td class="font-medium">${fmtPrice(info.current_price)}</td>
+            <td><span class="${chg.up?'up':'down'} text-sm">${chg.v}</span></td>
+            <td><span class="text-sm">${info.pe_ratio?.toFixed(1)||'—'}</span></td>
+            ${scell('RSI')}${scell('MACD')}${scell('Bollinger')}${scell('Stochastic')}${scell('MA Cross')}${scell('Volume')}
+            <td>${compTag}</td></tr>`;
+    });
+    cont.innerHTML=`<div class="overflow-x-auto"><table class="w-full">${header}<tbody>${body}</tbody></table></div>`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockTracing — 智能股票分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg:    '#121723',
+                        card:  '#1A2030',
+                        bord:  '#2A3040',
+                        up:    '#00B887',
+                        down:  '#F54D4D',
+                        warn:  '#F59E0B',
+                        mute:  '#848E9C',
+                        acc:   '#296BEF',
+                        text:  '#E8EAED',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background:#121723; color:#E8EAED; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+        ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:#2A3040; border-radius:2px; }
+        .card { background:#1A2030; border:1px solid #2A3040; border-radius:10px; }
+        .btn { border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; transition:.15s; cursor:pointer; border:none; }
+        .btn-acc { background:#296BEF; color:#fff; } .btn-acc:hover { background:#1D5BD9; }
+        .btn-outline { background:transparent; border:1px solid #2A3040; color:#848E9C; }
+        .btn-outline:hover { border-color:#296BEF; color:#E8EAED; }
+        .btn-sm { padding:3px 10px; font-size:12px; }
+        .btn-xs { padding:2px 6px; font-size:11px; border-radius:4px; }
+        .up { color:#00B887; } .down { color:#F54D4D; } .warn { color:#F59E0B; }
+        .bg-up { background:rgba(0,184,135,0.12); } .bg-down { background:rgba(245,77,77,0.12); }
+        .bg-warn { background:rgba(245,158,11,0.12); }
+        .tag { display:inline-block; padding:1px 6px; border-radius:3px; font-size:11px; font-weight:600; }
+        .tag-up { color:#00B887; background:rgba(0,184,135,0.12); }
+        .tag-down { color:#F54D4D; background:rgba(245,77,77,0.12); }
+        .tag-warn { color:#F59E0B; background:rgba(245,158,11,0.12); }
+        .tag-mute { color:#848E9C; background:rgba(132,142,156,0.12); }
+        .tag-acc { color:#296BEF; background:rgba(41,107,239,0.12); }
+        .input { background:#121723; border:1px solid #2A3040; border-radius:6px; padding:8px 12px; font-size:13px; color:#E8EAED; outline:none; }
+        .input:focus { border-color:#296BEF; }
+        .input::placeholder { color:#4A5466; }
+        .spinner { border:2px solid #2A3040; border-top:2px solid #296BEF; border-radius:50%; width:20px; height:20px; animation:spin .6s linear infinite; }
+        .spinner-lg { width:36px; height:36px; border-width:3px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes flashUp { 0%{background:rgba(0,184,135,0.3)} 100%{background:transparent} }
+        @keyframes flashDown { 0%{background:rgba(245,77,77,0.3)} 100%{background:transparent} }
+        @keyframes slideUp { 0%{transform:translateY(40%);opacity:0} 100%{transform:translateY(0);opacity:1} }
+        @keyframes slideDown { 0%{transform:translateY(-40%);opacity:0} 100%{transform:translateY(0);opacity:1} }
+        .price-flash-up { animation: flashUp .8s ease-out; }
+        .price-flash-down { animation: flashDown .8s ease-out; }
+        .price-slide-in { display:inline-block; }
+        .price-up .price-slide-in { animation: slideUp .35s ease-out; }
+        .price-down .price-slide-in { animation: slideDown .35s ease-out; }
+        .price-cell { transition: color .3s; border-radius:4px; padding:2px 6px; margin:-2px -6px; white-space:nowrap; }
+        .price-cell .price-slide-in { display:inline-block; }
+        .price-cell.price-up .price-slide-in { color:#66d9a8; }
+        .price-cell.price-down .price-slide-in { color:#f78c8c; }
+        body.dashboard-fullscreen #sidebar { display:none; }
+        body.dashboard-fullscreen #dashboard-wrap { padding:6px; }
+        body.dashboard-fullscreen .dash-tools { display:none; }
+        #timeline.hidden-tl { display:none !important; }
+        .market-dot { padding:1px 6px; border-radius:3px; font-size:11px; }
+        .market-open { color:#00B887; background:rgba(0,184,135,0.12); }
+        .market-closed { color:#F54D4D; background:rgba(245,77,77,0.12); }
+        .market-lunch { color:#F59E0B; background:rgba(245,158,11,0.12); }
+        #timeline { position:relative; height:62px; background:#0d1117; border-radius:6px; overflow:hidden; margin-bottom:14px; border:1px solid #1a2233; }
+        #timeline .ticks { position:absolute; top:26px; bottom:18px; left:0; right:0; display:flex; }
+        #timeline .tick-h { flex:1; position:relative; border-left:1px solid #1a2440; }
+        #timeline .tick-h:first-child { border-left:none; }
+        #timeline .tick-sub { position:absolute; top:4px; bottom:45%; width:1px; background:#121b2e; }
+        #timeline .bands { position:absolute; top:2px; height:23px; left:0; right:0; }
+        #timeline .mkt-band { position:absolute; border-radius:1px; display:flex; align-items:center; justify-content:center; transition:filter .15s,box-shadow .15s; }
+        #timeline .mkt-band:hover,
+        #timeline .mkt-band.hl { filter:brightness(1.5); box-shadow:0 0 6px rgba(255,255,255,.25); z-index:1; }
+        #timeline .mkt-ext { position:absolute; border-radius:1px; opacity:0; transition:opacity .3s ease; pointer-events:none; }
+        #timeline .mkt-ext.show { opacity:0.55; }
+        #timeline .mkt-ext.pre.cn  { background:rgba(229,62,62,0.55); }
+        #timeline .mkt-ext.post.cn { background:rgba(229,62,62,0.55); }
+        #timeline .mkt-ext.pre.hk  { background:rgba(221,107,32,0.55); }
+        #timeline .mkt-ext.post.hk { background:rgba(221,107,32,0.55); }
+        #timeline .mkt-ext.pre.jp  { background:rgba(128,90,213,0.55); }
+        #timeline .mkt-ext.post.jp { background:rgba(128,90,213,0.55); }
+        #timeline .mkt-ext.pre.eu  { background:rgba(49,130,206,0.55); }
+        #timeline .mkt-ext.post.eu { background:rgba(49,130,206,0.55); }
+        #timeline .mkt-ext.pre.us  { background:rgba(56,161,105,0.55); }
+        #timeline .mkt-ext.post.us { background:rgba(56,161,105,0.55); }
+        #timeline .mkt-band span { font-size:7px; font-weight:700; color:#fff; text-shadow:0 0 3px rgba(0,0,0,.6); white-space:nowrap; overflow:hidden; }
+        #timeline .mkt-band.cn { background:#e53e3e; }
+        #timeline .mkt-band.hk { background:#dd6b20; }
+        #timeline .mkt-band.jp { background:#805ad5; }
+        #timeline .mkt-band.eu { background:#3182ce; }
+        #timeline .mkt-band.us { background:#38a169; }
+        #timeline .past-mask { position:absolute; top:0; bottom:18px; left:0; background:rgba(13,17,23,0.6); transition:width .8s linear; pointer-events:none; }
+        #timeline .labels { position:absolute; bottom:2px; left:0; right:0; height:14px; display:flex; }
+        #timeline .labels span { flex:1; font-size:8px; color:#3a4560; padding-left:2px; line-height:14px; }
+        #timeline .labels span.major { color:#586580; font-weight:600; }
+        #timeline .current-line { position:absolute; top:0; bottom:18px; width:1.5px; background:#fff; z-index:3; pointer-events:none; transition:left .8s linear; box-shadow:0 0 6px rgba(255,255,255,.3); }
+        #loading-overlay { position:fixed; inset:0; background:rgba(18,23,35,0.85); display:flex; align-items:center; justify-content:center; z-index:9999; }
+        .hidden { display:none !important; }
+        .tab { padding:6px 16px; font-size:13px; color:#848E9C; cursor:pointer; border-bottom:2px solid transparent; transition:.15s; }
+        .tab:hover { color:#E8EAED; }
+        .tab.active { color:#296BEF; border-bottom-color:#296BEF; }
+        .prose-sm { font-size:13px; line-height:1.7; }
+        .prose-sm strong { color:#93C5FD; }
+        table { border-collapse:collapse; }
+        th { font-weight:500; font-size:12px; color:#848E9C; text-align:left; padding:10px 12px; border-bottom:1px solid #2A3040; }
+        td { padding:10px 12px; font-size:13px; border-bottom:1px solid #1A2030; }
+        tr:hover td { background:rgba(41,107,239,0.04); }
+        #sidebar { transition: width .25s ease; }
+        #sidebar.sidebar-collapsed { width:56px; }
+        #sidebar.sidebar-collapsed .sidebar-label,
+        #sidebar.sidebar-collapsed .sidebar-sub { display:none; }
+        #sidebar.sidebar-collapsed .sidebar-icon { margin:0 auto; }
+    </style>
+</head>
+<body class="min-h-screen flex">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-44 bg-card border-r border-bord flex flex-col shrink-0 overflow-hidden">
+        <div class="p-4 pb-3 flex items-center justify-between">
+            <div>
+                <a href="/" class="text-lg font-bold tracking-tight sidebar-label" style="color:#296BEF;">StockTracing</a>
+                <p class="text-xs text-mute mt-0.5 sidebar-sub">智能股票分析</p>
+            </div>
+            <button id="sidebar-toggle" onclick="toggleSidebar()" class="text-mute hover:text-text p-1 text-lg leading-none">&laquo;</button>
+        </div>
+        <nav class="flex-1 px-3 space-y-1">
+            <a href="/" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_home %}text-mute hover:text-text{% endblock %}">
+                <span class="text-base sidebar-icon">📊</span><span class="sidebar-label">仪表盘</span>
+            </a>
+            <a href="/scan" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_scan %}text-mute hover:text-text{% endblock %}">
+                <span class="text-base sidebar-icon">🔎</span><span class="sidebar-label">技术扫描</span>
+            </a>
+            <a href="/hunt" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_hunt %}text-mute hover:text-text{% endblock %}">
+                <span class="text-base sidebar-icon">🎯</span><span class="sidebar-label">狩猎</span>
+            </a>
+            <a href="/trades" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_trades %}text-mute hover:text-text{% endblock %}">
+                <span class="text-base sidebar-icon">📒</span><span class="sidebar-label">交易记录</span>
+            </a>
+        </nav>
+        <div class="p-3 border-t border-bord sidebar-sub">
+            <p class="text-xs text-mute">数据来源: Yahoo Finance</p>
+            <p class="text-xs text-mute">AI: {% if config.LLM_ENABLED %}已启用{% else %}未配置{% endif %}</p>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 overflow-auto" id="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Loading -->
+    <div id="loading-overlay" class="hidden">
+        <div class="text-center">
+            <div class="spinner spinner-lg mx-auto mb-4"></div>
+            <p class="text-mute text-sm">加载中...</p>
+        </div>
+    </div>
+
+    <script>
+        function showLoading() { document.getElementById('loading-overlay').classList.remove('hidden'); }
+        function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
+        async function api(p) { const r=await fetch('/api'+p); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+        function fmtNum(n,d=2){if(n==null)return'-';if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';return Number(n).toFixed(d);}
+        function fmtChg(cur,prev){if(cur==null||prev==null||prev===0)return{v:'0.00',up:true};const p=((cur-prev)/prev)*100;return{v:(p>=0?'+':'')+p.toFixed(2)+'%',up:p>=0};}
+        function fmtPrice(n){if(n==null)return'-';return '$'+Number(n).toFixed(2);}
+        function tagCls(signal){return signal==='buy'?'tag-up':signal==='sell'?'tag-down':'tag-warn';}
+        function signalLabel(signal){return signal==='buy'?'买入':signal==='sell'?'卖出':'中性';}
+        function toggleSidebar(){
+            const sb=document.getElementById('sidebar');
+            const btn=document.getElementById('sidebar-toggle');
+            sb.classList.toggle('sidebar-collapsed');
+            btn.textContent=sb.classList.contains('sidebar-collapsed')?'»':'«';
+            try{localStorage.setItem('sidebar-collapsed',sb.classList.contains('sidebar-collapsed')?'1':'0');}catch(e){}
+        }
+        (function(){
+            try{if(localStorage.getItem('sidebar-collapsed')==='1')toggleSidebar();}catch(e){}
+        })();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

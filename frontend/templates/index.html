@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block nav_home %}text-text bg-white/5{% endblock %}
+{% block content %}
+<div id="dashboard-wrap" class="p-6">
+    <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold">仪表盘</h1>
+            <div id="market-bar" class="flex items-center gap-3 text-xs">
+                <span id="bj-clock" class="font-mono text-sm font-bold text-acc">--:--:--</span>
+                <span class="text-mute">|</span>
+                <span id="mkt-cn" class="market-dot" data-market="cn">A股</span>
+                <span id="mkt-hk" class="market-dot" data-market="hk">港股</span>
+                <span id="mkt-jp" class="market-dot" data-market="jp">日股</span>
+                <span id="mkt-eu" class="market-dot" data-market="eu">欧股</span>
+                <span id="mkt-us" class="market-dot" data-market="us">美股</span>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button id="tl-btn" onclick="toggleTimeline()" class="btn btn-outline btn-xs text-mute" title="时刻表">◷ 时刻表</button>
+            <button id="fs-btn" onclick="toggleFS()" class="btn btn-outline btn-xs text-mute" title="全屏">⛶ 全屏</button>
+        </div>
+    </div>
+
+    <!-- 24h Timeline -->
+    <div id="timeline">
+        <div class="bands" id="timeline-bands"></div>
+        <div class="ticks" id="timeline-ticks"></div>
+        <div class="past-mask" id="timeline-mask"></div>
+        <div class="current-line" id="timeline-now"></div>
+        <div class="labels" id="timeline-labels"></div>
+    </div>
+
+    <p class="text-sm text-mute mb-6">追踪你的自选股票，查看实时估值与技术信号</p>
+
+    <!-- Search Bar -->
+    <div class="card p-4 mb-6 dash-tools">
+        <div class="flex gap-3">
+            <input id="search-input" type="text" placeholder="搜索股票代码...  (AAPL / TSLA / 600519.SS)"
+                   class="input flex-1" autocomplete="off">
+            <button onclick="doSearch()" class="btn btn-acc">搜索</button>
+        </div>
+        <div id="search-results" class="mt-3 hidden"></div>
+    </div>
+
+    <!-- Watchlist Bar -->
+    <div class="card p-4 mb-6 dash-tools">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-sm uppercase tracking-wide text-mute">自选股</h2>
+            <div class="flex gap-2">
+                <input id="add-symbol" type="text" placeholder="添加代码" class="input py-1.5 text-xs w-28" autocomplete="off">
+                <button onclick="addOne()" class="btn btn-acc btn-sm">+ 添加</button>
+            </div>
+        </div>
+        <div id="watchlist-tags" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- Dashboard: horizontal bar list -->
+    <div class="overflow-x-auto">
+        <!-- Header row -->
+        <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-mute font-medium border-b border-bord mb-1" style="min-height:32px">
+            <span class="w-28 shrink-0">代码 / 名称</span>
+            <span class="w-24 shrink-0">价格</span>
+            <span class="w-20 shrink-0 text-center">5m 涨跌</span>
+            <span class="w-20 shrink-0 text-center">D 涨跌/信号</span>
+            <span class="w-20 shrink-0 text-center">W 涨跌/信号</span>
+            <span class="w-20 shrink-0 text-center">M 涨跌/信号</span>
+            <span class="w-20 shrink-0 text-center">Y 涨跌/信号</span>
+            <span class="shrink-0 w-14 text-center">综合</span>
+            <span class="flex-1"></span>
+        </div>
+        <div id="dashboard" class="space-y-1.5 min-w-[740px]"></div>
+    </div>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+let priceMap={};
+let autoRefreshTimer=null;
+
+function diffPrice(oldS,newS){
+    if(!oldS||oldS===newS)return{prefix:newS,changed:'',suffix:''};
+    let i=0;
+    while(i<oldS.length&&i<newS.length&&oldS[i]===newS[i])i++;
+    let jOld=oldS.length,jNew=newS.length;
+    while(jOld>i&&jNew>i&&oldS[jOld-1]===newS[jNew-1]){jOld--;jNew--;}
+    return{prefix:newS.slice(0,i),changed:newS.slice(i,jNew),suffix:newS.slice(jNew)};
+}
+
+function priceHTML(sym,curPrice,prevPrice,prevClose,flashCls=''){
+    const curStr=fmtPrice(curPrice);
+    const prevStr=prevPrice!=null?fmtPrice(prevPrice):null;
+    const diff=diffPrice(prevStr||'',curStr);
+    let dir='';
+    if(prevClose!=null&&curPrice!=null)dir=curPrice>prevClose?'price-up':'price-down';
+    else if(curPrice!=null)dir='price-up';
+
+    let inner='';
+    if(diff.prefix)inner+=`<span class="price-prefix">${diff.prefix}</span>`;
+    if(diff.changed)inner+=`<span class="price-slide-in">${diff.changed}</span>`;
+    if(diff.suffix)inner+=`<span class="price-suffix">${diff.suffix}</span>`;
+    if(!diff.prefix&&!diff.changed&&!diff.suffix)inner=`<span class="price-slide-in">${curStr}</span>`;
+
+    return`<span class="text-base font-bold w-24 shrink-0 price-cell ${dir} ${flashCls}" data-symbol="${sym}" data-price="${curPrice||''}">${inner}</span>`;
+}
+
+function updatePriceCell(cell,newPrice){
+    const oldStr=cell.textContent.replace(/\s/g,'');
+    const newStr=fmtPrice(newPrice);
+    if(oldStr===newStr)return false;
+    const diff=diffPrice(oldStr,newStr);
+    let html='';
+    if(diff.prefix)html+=`<span class="price-prefix">${diff.prefix}</span>`;
+    if(diff.changed)html+=`<span class="price-slide-in">${diff.changed}</span>`;
+    if(diff.suffix)html+=`<span class="price-suffix">${diff.suffix}</span>`;
+    if(!diff.prefix&&!diff.changed&&!diff.suffix)html=`<span class="price-slide-in">${newStr}</span>`;
+    cell.innerHTML=html;
+    cell.setAttribute('data-price',String(newPrice||''));
+    const inner=cell.querySelector('.price-slide-in');
+    if(inner){
+        inner.style.animation='none';
+        void inner.offsetWidth;
+        inner.style.animation='';
+    }
+    return true;
+}
+
+async function doSearch(){
+    const q=document.getElementById('search-input').value.trim();
+    if(!q)return;
+    showLoading();
+    try{
+        const info=await api('/stock/'+encodeURIComponent(q));
+        const r=document.getElementById('search-results');
+        r.classList.remove('hidden');
+        r.innerHTML=`<div class="flex items-center justify-between bg-bg rounded-lg p-3">
+            <div><span class="font-semibold">${info.symbol}</span> <span class="text-mute text-xs ml-2">${info.name||''}</span></div>
+            <a href="/stock/${info.symbol}" class="btn btn-acc btn-sm">查看</a></div>`;
+    }catch(e){
+        const r=document.getElementById('search-results');
+        r.classList.remove('hidden');
+        r.innerHTML=`<p class="text-down text-sm">未找到 "${q}"</p>`;
+    }
+    hideLoading();
+}
+document.getElementById('search-input').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+
+function makeBar(sym, data){
+    const info=data.info||{};
+    const analyst=data.analyst||{};
+    const tech=data.technical||{};
+    const periods=data.periods||{changes:{},signals:{}};
+    const pdChg=periods.changes||{};
+    const pdSig=periods.signals||{};
+    const comp=tech.signals?tech.signals.find(x=>x.indicator==='综合评分'):null;
+    const upside=analyst.upside_percent;
+
+    function chgSpan(val){
+        if(val==null||val===undefined)return'<span class="text-mute">—</span>';
+        const cls=val>=0?'up':'down';
+        const sign=val>=0?'+':'';
+        return`<span class="${cls} font-medium">${sign}${val.toFixed(1)}%</span>`;
+    }
+    function sigSpan(sig){
+        if(!sig||!sig.overall)return'<span class="text-mute">—</span>';
+        return`<span class="tag ${tagCls(sig.overall)}" style="font-size:10px;padding:0 3px">${sig.overall==='buy'?'B':sig.overall==='sell'?'S':'N'}</span>`;
+    }
+
+    const curPrice=info.current_price;
+    const prevPrice=priceMap[sym];
+    let flashClass='';
+    if(prevPrice!=null&&curPrice!=null&&prevPrice!==curPrice){
+        flashClass=curPrice>prevPrice?'price-flash-up':'price-flash-down';
+    }
+    priceMap[sym]=curPrice;
+
+    return `<div class="card px-4 py-1.5 hover:border-acc/30 cursor-pointer transition-colors" style="min-height:44px" onclick="location.href='/stock/${sym}'">
+        <div class="flex items-center gap-3 h-full">
+            <div class="w-28 shrink-0 leading-tight">
+                <span class="font-bold text-sm block">${sym}</span>
+                <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
+            </div>
+            ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass)}
+            <div class="w-20 shrink-0 text-center text-xs">
+                <span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span>
+            </div>
+            <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.D)} ${sigSpan(pdSig.D)}</div>
+            <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.W)} ${sigSpan(pdSig.W)}</div>
+            <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.M)} ${sigSpan(pdSig.M)}</div>
+            <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.Y)} ${sigSpan(pdSig.Y)}</div>
+            <span class="tag ${comp?tagCls(comp.signal):'tag-mute'} shrink-0 w-14 text-center">${comp?signalLabel(comp.signal):'—'}</span>
+            <div class="flex-1 flex items-center gap-4 text-xs">
+                <span><span class="text-mute">PE </span>${info.pe_ratio?.toFixed(1)||'—'}</span>
+                <span><span class="text-mute">市值 </span>${fmtNum(info.market_cap)}</span>
+                <span><span class="text-mute">目标 </span><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
+            </div>
+        </div>
+    </div>`;
+}
+
+async function loadDashboard(){
+    const tags=document.getElementById('watchlist-tags');
+    const grid=document.getElementById('dashboard');
+    let syms=[];
+    try{ syms=(await api('/watchlist')).symbols; }catch(e){}
+    if(!syms.length){
+        tags.innerHTML='<span class="text-mute text-xs">暂无自选股，搜索并添加股票开始追踪</span>';
+        grid.innerHTML='<div class="text-center py-12 text-mute text-sm">添加自选股后此处将显示实时卡片</div>';
+        priceMap={};
+        return;
+    }
+    tags.innerHTML=syms.map(s=>`<span class="inline-flex items-center gap-1 bg-bg border border-bord rounded px-2.5 py-1 text-xs">
+        <a href="/stock/${s}" class="hover:text-acc">${s}</a>
+        <button onclick="removeOne('${s}')" class="text-mute hover:text-down ml-0.5">&times;</button></span>`).join('');
+
+    grid.innerHTML='<div class="text-center py-6"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">加载中...</p></div>';
+
+    const results=await Promise.allSettled(syms.map(async s=>{
+        try{const d=await api('/stock/'+s+'/full');return{s,data:d,ok:true};}
+        catch(e){return{s,ok:false,err:e.message};}
+    }));
+
+    grid.innerHTML=results.map(r=>{
+        if(r.status==='rejected'||!r.value.ok){
+            const sym=r.value?.s||'?';
+            return `<div class="card px-4 py-3"><p class="text-down text-sm">${sym} 加载失败</p></div>`;
+        }
+        return makeBar(r.value.s, r.value.data);
+    }).join('');
+}
+
+async function refreshPrices(){
+    const grid=document.getElementById('dashboard');
+    const cells=grid.querySelectorAll('.price-cell');
+    if(!cells.length)return;
+
+    for(const sym of Object.keys(priceMap)){
+        try{
+            const t=await api('/stock/'+sym+'/tick');
+            const cur=t.price;
+            const chg5m=t.change_5m;
+            const prev=priceMap[sym];
+
+            // Update price cell
+            if(cur!=null&&prev!=null&&cur!==prev){
+                priceMap[sym]=cur;
+                const cell=grid.querySelector(`.price-cell[data-symbol="${sym}"]`);
+                if(cell){
+                    cell.classList.remove('price-flash-up','price-flash-down','price-up','price-down');
+                    void cell.offsetWidth;
+                    const dir=cur>prev?'price-up':'price-down';
+                    cell.classList.add(dir,cur>prev?'price-flash-up':'price-flash-down');
+                    if(!updatePriceCell(cell,cur)){
+                        const inner=cell.querySelector('.price-slide-in');
+                        if(inner){inner.style.animation='none';void inner.offsetWidth;inner.style.animation='';}
+                    }
+                }
+            }else if(cur!=null&&prev==null){
+                priceMap[sym]=cur;
+            }
+
+            // Update 5m cell
+            const m5=grid.querySelector(`.tick-5m[data-symbol="${sym}"]`);
+            if(m5&&chg5m!=null){
+                const old5m=m5.getAttribute('data-5m');
+                if(old5m!==String(chg5m)){
+                    m5.setAttribute('data-5m',String(chg5m));
+                    m5.textContent=(chg5m>=0?'+':'')+chg5m.toFixed(2)+'%';
+                    m5.className='tick-5m font-medium '+(chg5m>=0?'up':'down');
+                }
+            }
+        }catch(e){}
+    }
+}
+
+async function addOne(){
+    const inp=document.getElementById('add-symbol');const sym=inp.value.trim();if(!sym)return;
+    inp.value='';
+    try{await fetch('/api/watchlist/'+encodeURIComponent(sym),{method:'POST'});loadDashboard();startAutoRefresh();}
+    catch(e){alert('添加失败: '+e.message);}
+}
+async function removeOne(sym){
+    try{await fetch('/api/watchlist/'+encodeURIComponent(sym),{method:'DELETE'});loadDashboard();startAutoRefresh();}
+    catch(e){alert('移除失败: '+e.message);}
+}
+
+function startAutoRefresh(){
+    if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+    autoRefreshTimer=setInterval(refreshPrices, 1000);
+}
+
+function toggleFS(){
+    const isFS=document.body.classList.toggle('dashboard-fullscreen');
+    document.getElementById('fs-btn').textContent=isFS?'⛶ 退出':'⛶ 全屏';
+}
+
+function toggleTimeline(){
+    const tl=document.getElementById('timeline');
+    const hidden=tl.classList.toggle('hidden-tl');
+    document.getElementById('tl-btn').textContent=hidden?'◷ 时刻表':'◴ 时刻表';
+    try{localStorage.setItem('tl-hidden',hidden?'1':'0');}catch(e){}
+}
+(function(){
+    try{if(localStorage.getItem('tl-hidden')==='1')toggleTimeline();}catch(e){}
+})();
+
+// -------- Market clock ----------
+(function buildTimeline(){
+    const ticks=document.getElementById('timeline-ticks');
+    const labels=document.getElementById('timeline-labels');
+    const bands=document.getElementById('timeline-bands');
+
+    for(let h=0;h<24;h++){
+        const col=document.createElement('div');
+        col.className='tick-h';
+        for(let s=1;s<12;s++){
+            const sub=document.createElement('div');
+            sub.className='tick-sub';
+            sub.style.left=(s/12*100)+'%';
+            col.appendChild(sub);
+        }
+        ticks.appendChild(col);
+
+        const lbl=document.createElement('span');
+        if(h%3===0){lbl.textContent=h;lbl.className='major';}
+        labels.appendChild(lbl);
+    }
+
+    // Market open segments in BJT decimal hours
+    const mkts=[
+        {id:'cn',label:'A股', desc:'9:30-11:30 / 13:00-15:00', segs:[[9.5,11.5],[13,15]], ext:{pre:[],post:[]}},
+        {id:'hk',label:'港股', desc:'9:30-12:00 / 13:00-16:00', segs:[[9.5,12],[13,16]], ext:{pre:[],post:[]}},
+        {id:'jp',label:'日股', desc:'8:00-10:30 / 11:30-14:00', segs:[[8,10.5],[11.5,14]], ext:{pre:[],post:[]}},
+        {id:'eu',label:'欧股', desc:'16:00-23:30 (伦敦)', segs:[[16,23.5]], ext:{pre:[[15,16]],post:[[23.5,24.25]]}},
+        {id:'us',label:'美股', desc:'21:30-04:00 (纽约)', segs:[[21.5,24],[0,4]], ext:{pre:[[16,21.5]],post:[[4,8]]}},
+    ];
+
+    // Find all breakpoints (market open/close times)
+    let bps=new Set([0,24]);
+    mkts.forEach(m=>m.segs.forEach(([s,e])=>{bps.add(s);bps.add(e);}));
+    bps=[...bps].sort((a,b)=>a-b);
+
+    // For each interval between breakpoints, list active markets
+    let slots=[]; // [{start, end, markets:[]}]
+    for(let i=0;i<bps.length-1;i++){
+        let s=bps[i],e=bps[i+1];
+        let active=[];
+        mkts.forEach(m=>{
+            if(m.segs.some(([ms,me])=>s<me&&e>ms))active.push(m.id);
+        });
+        if(active.length)slots.push({start:s,end:e,markets:active});
+    }
+
+    // Greedy row assignment: for each market, find lowest row free across all its intervals
+    let rowAssign={};
+    mkts.forEach(m=>{
+        let maxOccupied=-1;
+        slots.forEach(sl=>{
+            if(!sl.markets.includes(m.id))return;
+            let others=sl.markets.filter(x=>x!==m.id);
+            others.forEach(o=>{if(rowAssign[o]!=null&&rowAssign[o]>maxOccupied)maxOccupied=rowAssign[o];});
+        });
+        rowAssign[m.id]=maxOccupied+1;
+    });
+
+    let maxRow=Math.max(...Object.values(rowAssign),1);
+    let bandAreaH=23;
+    let rowH=bandAreaH/(maxRow+1);
+    let margin=1;
+
+    mkts.forEach(m=>{
+        let row=rowAssign[m.id];
+        let bandH=rowH-margin*2;
+        let bandTop=row*rowH+margin;
+
+        // Main segments
+        m.segs.forEach(([s,e])=>{
+            let band=document.createElement('div');
+            band.className='mkt-band '+m.id;
+            band.style.left=(s/24*100)+'%';
+            band.style.width=((e-s)/24*100)+'%';
+            band.style.top=bandTop+'px';
+            band.style.height=bandH+'px';
+            band.innerHTML=rowH>=8?'<span>'+m.label+'</span>':'';
+            band.title=m.label+' '+m.desc;
+            band.dataset.mkt=m.id;
+            band.addEventListener('mouseenter',()=>highlightMkt(m.id,true));
+            band.addEventListener('mouseleave',()=>highlightMkt(m.id,false));
+            bands.appendChild(band);
+        });
+
+        // Pre-market extensions
+        m.ext.pre.forEach(([s,e])=>{
+            let ext=document.createElement('div');
+            ext.className='mkt-ext pre '+m.id;
+            ext.style.left=(s/24*100)+'%';
+            ext.style.width=((e-s)/24*100)+'%';
+            ext.style.top=(bandTop-1)+'px';
+            ext.style.height=(bandH+2)+'px';
+            ext.dataset.mkt=m.id;
+            ext.title='盘前 '+m.label;
+            bands.appendChild(ext);
+        });
+
+        // Post-market extensions
+        m.ext.post.forEach(([s,e])=>{
+            let ext=document.createElement('div');
+            ext.className='mkt-ext post '+m.id;
+            ext.style.left=(s/24*100)+'%';
+            ext.style.width=((e-s)/24*100)+'%';
+            ext.style.top=(bandTop-1)+'px';
+            ext.style.height=(bandH+2)+'px';
+            ext.dataset.mkt=m.id;
+            ext.title='盘后 '+m.label;
+            bands.appendChild(ext);
+        });
+    });
+
+    function highlightMkt(id,on){
+        bands.querySelectorAll('.mkt-band[data-mkt="'+id+'"]').forEach(b=>b.classList.toggle('hl',on));
+        bands.querySelectorAll('.mkt-ext[data-mkt="'+id+'"]').forEach(b=>b.classList.toggle('show',on));
+    }
+})();
+
+function updateMarketBar(){
+    const now=new Date();
+    const bjt=new Date(now.getTime()+8*3600000);
+    const h=bjt.getUTCHours(),m=bjt.getUTCMinutes(),s=bjt.getUTCSeconds();
+    const dow=bjt.getUTCDay();
+    const isWeekday=dow>=1&&dow<=5;
+    const totalMin=(h*60+m);
+    const pct=(totalMin/1440*100).toFixed(3);
+
+    document.getElementById('bj-clock').textContent=
+        String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+' BJT';
+
+    // Timeline mask & cursor
+    document.getElementById('timeline-mask').style.width=pct+'%';
+    document.getElementById('timeline-now').style.left=pct+'%';
+
+    function setMkt(id, segments){
+        let cls='market-closed';
+        if(isWeekday){
+            for(const[s,e,t]of segments){
+                if(totalMin>=s&&totalMin<e){cls=t;break;}
+            }
+        }
+        const el=document.getElementById(id);
+        el.className='market-dot '+cls;
+    }
+
+    setMkt('mkt-cn',[[570,690,'market-open'],[780,900,'market-open'],[690,780,'market-lunch']]);
+    setMkt('mkt-hk',[[570,720,'market-open'],[780,960,'market-open'],[720,780,'market-lunch']]);
+    setMkt('mkt-jp',[[480,630,'market-open'],[690,840,'market-open'],[630,690,'market-lunch']]);
+    setMkt('mkt-eu',[[960,1410,'market-open']]);
+    setMkt('mkt-us',[[1290,1440,'market-open'],[0,240,'market-open']]);
+}
+
+updateMarketBar();
+setInterval(updateMarketBar,1000);
+
+document.getElementById('add-symbol').addEventListener('keydown',e=>{if(e.key==='Enter')addOne();});
+loadDashboard();
+startAutoRefresh();
+</script>
+{% endblock %}

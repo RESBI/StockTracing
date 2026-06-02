@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block nav_hunt %}text-text bg-white/5{% endblock %}
+{% block content %}
+<div class="p-6">
+    <h1 class="text-xl font-bold mb-1">狩猎</h1>
+    <p class="text-sm text-mute mb-6">扫描大盘领域，发掘低估标的与机构高评级机会</p>
+
+    <!-- Controls -->
+    <div class="card p-4 mb-6">
+        <div class="flex items-center gap-4 flex-wrap">
+            <div>
+                <label class="text-xs text-mute block mb-1">大盘</label>
+                <select id="hunt-market" class="input py-1.5 text-sm w-28" onchange="loadSectors()"></select>
+            </div>
+            <div>
+                <label class="text-xs text-mute block mb-1">领域</label>
+                <select id="hunt-sector" class="input py-1.5 text-sm w-36"></select>
+            </div>
+            <div class="pt-4">
+                <button onclick="runHunt()" class="btn btn-acc btn-sm">开始狩猎</button>
+            </div>
+            <div class="pt-4 ml-auto">
+                <button onclick="showHistory()" class="btn btn-outline btn-xs">历史记录</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="hunt-status" class="text-center py-8 text-mute text-sm">选择大盘和领域，点击"开始狩猎"</div>
+    <div id="hunt-results" class="space-y-1.5 hidden"></div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick="closeHistory(event)">
+        <div class="card p-6 w-full max-w-lg max-h-[80vh] overflow-auto" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="font-semibold">狩猎历史</h2>
+                <button onclick="document.getElementById('history-modal').classList.add('hidden')" class="text-mute hover:text-text text-lg">&times;</button>
+            </div>
+            <div id="history-list" class="space-y-2"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function initHunt(){
+    try{const mkts=await api('/hunt/markets');
+        const sel=document.getElementById('hunt-market');
+        mkts.forEach(m=>sel.innerHTML+=`<option value="${m}">${m}</option>`);
+        if(mkts.length)loadSectors();
+    }catch(e){}
+}
+async function loadSectors(){
+    const m=document.getElementById('hunt-market').value;
+    try{const secs=await api('/hunt/sectors?market='+encodeURIComponent(m));
+        const sel=document.getElementById('hunt-sector');sel.innerHTML='';
+        secs.forEach(s=>sel.innerHTML+=`<option value="${s}">${s}</option>`);
+    }catch(e){}
+}
+
+async function runHunt(){
+    const m=document.getElementById('hunt-market').value;
+    const s=document.getElementById('hunt-sector').value;
+    if(!m||!s)return;
+    const stat=document.getElementById('hunt-status');stat.classList.remove('hidden');
+    stat.innerHTML='<div class="spinner spinner-lg mx-auto mb-3"></div><p>正在扫描 '+m+' / '+s+' ...</p>';
+    document.getElementById('hunt-results').classList.add('hidden');
+    try{
+        const r=await fetch('/api/hunt/run?market='+encodeURIComponent(m)+'&sector='+encodeURIComponent(s),{method:'POST'}).then(r=>r.json());
+        stat.classList.add('hidden');
+        renderHuntResults(r);
+        document.getElementById('hunt-results').classList.remove('hidden');
+    }catch(e){
+        stat.innerHTML='<p class="text-down">扫描失败: '+e.message+'</p>';
+    }
+}
+
+function renderHuntResults(data){
+    const cont=document.getElementById('hunt-results');
+    const rs=data.results||[];
+    if(!rs.length){cont.innerHTML='<div class="card p-4 text-center text-mute text-sm">未找到标的</div>';return;}
+
+    cont.innerHTML='<div class="text-xs text-mute mb-2 px-1">'+data.market+' · '+data.sector+' · 共'+data.total+'只 · 按推荐强度排序</div>';
+
+    cont.innerHTML+=rs.map((r,i)=>{
+        const sc=r.scores||{};
+        function bar(cls,score,max,label){
+            const pct=Math.round(score/max*100);
+            return`<div class="flex items-center gap-1.5 text-[10px]">
+                <span class="text-mute w-8 shrink-0">${label}</span>
+                <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden"><div class="h-full ${cls} rounded-full" style="width:${pct}%"></div></div>
+                <span class="w-6 text-right">${score}</span>
+            </div>`;
+        }
+        function detailTags(details){
+            if(!details||!details.length)return'';
+            return details.slice(0,4).map(d=>`<span class="text-[10px] text-mute mr-1.5">${d}</span>`).join('');
+        }
+
+        const rankBadge=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+        const scoreColor=r.total_score>=70?'up':r.total_score>=50?'warn':'down';
+        const upside=r.target_mean&&r.price?(r.target_mean-r.price)/r.price*100:null;
+
+        return`<div class="card px-4 py-2 hover:border-acc/30 cursor-pointer" onclick="location.href='/stock/${r.symbol}'">
+            <div class="flex items-center gap-3">
+                <span class="text-sm w-6 shrink-0">${rankBadge||(i+1)}</span>
+                <div class="w-24 shrink-0 leading-tight">
+                    <span class="font-bold text-sm block">${r.symbol}</span>
+                    <span class="text-mute text-[10px] truncate block">${r.name||''}</span>
+                </div>
+                <span class="text-base font-bold w-20 shrink-0">$ ${r.price?.toFixed(2)||'—'}</span>
+                <div class="flex-1 space-y-0.5">
+                    ${bar('bg-up',sc.value?.score||0,30,'价值')}
+                    ${bar('bg-up',sc.analyst?.score||0,25,'机构')}
+                    ${bar('bg-up',sc.technical?.score||0,25,'技术')}
+                    ${bar('bg-up',sc.financial?.score||0,20,'财务')}
+                </div>
+                <div class="text-center shrink-0 w-16">
+                    <span class="text-lg font-bold ${scoreColor}">${r.total_score}</span>
+                    <span class="text-[10px] text-mute block">/100</span>
+                </div>
+                <span class="tag ${tagCls(r.total_score>=60?'buy':r.total_score>=40?'sell':'neutral')} shrink-0 w-14 text-center">${r.total_score>=60?'推荐':r.total_score>=40?'关注':'一般'}</span>
+            </div>
+            <div class="mt-1.5 ml-9 grid grid-cols-4 gap-x-4 text-[10px] text-mute">
+                <div>${detailTags(sc.value?.details)}</div>
+                <div>${detailTags(sc.analyst?.details)}</div>
+                <div>${detailTags(sc.technical?.details)}</div>
+                <div>${detailTags(sc.financial?.details)}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function showHistory(){
+    document.getElementById('history-modal').classList.remove('hidden');
+    const list=document.getElementById('history-list');
+    list.innerHTML='<div class="text-center py-4"><div class="spinner mx-auto mb-2"></div></div>';
+    try{
+        const rows=await api('/hunt/history');
+        if(!rows.length){list.innerHTML='<p class="text-mute text-sm text-center">暂无历史记录</p>';return;}
+        list.innerHTML=rows.map(r=>`
+            <div class="bg-bg rounded-lg p-3 flex items-center justify-between hover:border-acc/30 border border-transparent cursor-pointer"
+                 onclick="loadHistorySession(${r.id})">
+                <div>
+                    <span class="font-medium text-sm">${r.market} · ${r.sector}</span>
+                    <span class="text-mute text-xs ml-2">${r.total}只</span>
+                </div>
+                <span class="text-mute text-xs">${(r.created_at||'').replace('T',' ').substring(0,16)}</span>
+            </div>`).join('');
+    }catch(e){list.innerHTML='<p class="text-down text-sm">加载失败</p>';}
+}
+
+async function loadHistorySession(id){
+    document.getElementById('history-modal').classList.add('hidden');
+    document.getElementById('hunt-status').classList.remove('hidden');
+    document.getElementById('hunt-status').innerHTML='<div class="spinner spinner-lg mx-auto mb-3"></div>';
+    try{
+        const data=await api('/hunt/history/'+id);
+        document.getElementById('hunt-status').classList.add('hidden');
+        renderHuntResults(data);
+        document.getElementById('hunt-results').classList.remove('hidden');
+    }catch(e){
+        document.getElementById('hunt-status').innerHTML='<p class="text-down">加载失败</p>';
+    }
+}
+
+function closeHistory(e){
+    if(e.target===document.getElementById('history-modal'))
+        document.getElementById('history-modal').classList.add('hidden');
+}
+
+initHunt();
+</script>
+{% endblock %}

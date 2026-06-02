@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block nav_trades %}text-text bg-white/5{% endblock %}
+{% block content %}
+<div class="p-6">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-xl font-bold mb-1">交易记录</h1>
+            <p class="text-sm text-mute">记录开单、平仓，追踪交易盈亏</p>
+        </div>
+        <button onclick="openForm()" class="btn btn-acc btn-sm">+ 添加记录</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-5 gap-3 mb-6" id="stats-row">
+        <div class="card p-3 text-center"><p class="text-xs text-mute">总记录</p><p class="text-xl font-bold" id="stat-total">—</p></div>
+        <div class="card p-3 text-center"><p class="text-xs text-mute">持仓中</p><p class="text-xl font-bold up" id="stat-open">—</p></div>
+        <div class="card p-3 text-center"><p class="text-xs text-mute">已实现</p><p class="text-xl font-bold" id="stat-pnl">—</p></div>
+        <div class="card p-3 text-center"><p class="text-xs text-mute">浮盈</p><p class="text-xl font-bold" id="stat-upnl">—</p></div>
+        <div class="card p-3 text-center"><p class="text-xs text-mute">胜率</p><p class="text-xl font-bold" id="stat-winrate">—</p></div>
+    </div>
+
+    <!-- Trade list -->
+    <div id="trade-list" class="space-y-2"></div>
+
+    <!-- Form Modal -->
+    <div id="trade-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick="closeModal(event)">
+        <div class="card p-6 w-full max-w-md" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="font-semibold" id="modal-title">添加记录</h2>
+                <button onclick="closeForm()" class="text-mute hover:text-text text-lg">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <input id="tf-symbol" placeholder="股票代码" class="input w-full">
+                <div class="flex gap-3">
+                    <select id="tf-dir" class="input w-28 text-sm">
+                        <option value="long">做多</option>
+                        <option value="short">做空</option>
+                    </select>
+                    <input id="tf-qty" type="number" step="1" placeholder="数量" class="input flex-1">
+                </div>
+                <div class="flex gap-3">
+                    <input id="tf-open-date" type="datetime-local" step="1" placeholder="开仓时间" class="input flex-1 text-sm">
+                    <input id="tf-open-price" type="number" step="0.01" placeholder="开仓价" class="input w-28">
+                </div>
+                <div class="flex gap-3">
+                    <input id="tf-close-date" type="datetime-local" step="1" placeholder="平仓时间" class="input flex-1 text-sm">
+                    <input id="tf-close-price" type="number" step="0.01" placeholder="平仓价" class="input w-28">
+                </div>
+                <input id="tf-notes" placeholder="备注（可选）" class="input w-full">
+                <button id="tf-submit" class="btn btn-acc w-full">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let editId=null;
+
+async function loadTrades(){
+    try{
+        const[trades,stats]=await Promise.all([api('/trades'),api('/trades/stats')]);
+        document.getElementById('stat-total').textContent=stats.total;
+        document.getElementById('stat-open').textContent=stats.open_count;
+        const pnlEl=document.getElementById('stat-pnl');
+        pnlEl.textContent='$'+stats.total_pnl.toFixed(2);
+        pnlEl.className='text-xl font-bold '+(stats.total_pnl>=0?'up':'down');
+        const upnlEl=document.getElementById('stat-upnl');
+        upnlEl.textContent='$'+(stats.unrealized_pnl||0).toFixed(2);
+        upnlEl.className='text-xl font-bold '+((stats.unrealized_pnl||0)>=0?'up':'down');
+        document.getElementById('stat-winrate').textContent=stats.win_rate+'%';
+        renderTrades(trades);
+    }catch(e){}
+}
+
+function renderTrades(trades){
+    const c=document.getElementById('trade-list');
+    if(!trades.length){c.innerHTML='<div class="card p-4 text-center text-mute text-sm">暂无交易记录</div>';return;}
+    c.innerHTML=trades.map(t=>{
+        const isLong=t.direction==='long';
+        const isOpen=!t.close_price;
+        let pnlText='—',pnlCls='';
+        if(t.open_price&&t.close_price&&t.quantity){
+            const pnl=isLong?(t.close_price-t.open_price)*t.quantity:(t.open_price-t.close_price)*t.quantity;
+            const pct=(isLong?(t.close_price-t.open_price)/t.open_price:(t.open_price-t.close_price)/t.open_price)*100;
+            pnlText=(pnl>=0?'+':'')+pnl.toFixed(2)+(pct!==0?' ('+(pct>=0?'+':'')+pct.toFixed(1)+'%)':'');
+            pnlCls=pnl>=0?'up':'down';
+        }else if(t._unrealized!=null){
+            const pnl=t._unrealized;
+            const pct=(isLong?(t.current_price-t.open_price)/t.open_price:(t.open_price-t.current_price)/t.open_price)*100;
+            pnlText=(pnl>=0?'+':'')+pnl.toFixed(2)+(pct!==0?' ('+(pct>=0?'+':'')+pct.toFixed(1)+'%)':'');
+            pnlCls=pnl>=0?'up':'down';
+        }
+        return`<div class="card px-4 py-2.5 flex items-center gap-3">
+            <span class="tag ${isLong?'tag-up':'tag-down'} w-12 text-center shrink-0">${isLong?'做多':'做空'}</span>
+            <span class="font-bold text-sm w-20 shrink-0">${t.symbol}</span>
+            <div class="text-xs w-28 shrink-0 leading-tight">
+                <div class="text-mute">${(t.open_date||'—').replace('T',' ').substring(0,16)}</div>
+                <div class="font-medium">${t.open_price?'@$'+Number(t.open_price).toFixed(2):'—'}</div>
+            </div>
+            <span class="text-mute text-xs shrink-0">→</span>
+            <div class="text-xs w-28 shrink-0 leading-tight">
+                ${t.close_date?`<div class="text-mute">${t.close_date.replace('T',' ').substring(0,16)}</div><div class="font-medium">${t.close_price?'@$'+Number(t.close_price).toFixed(2):''}</div>`:
+                `<div class="text-mute">持仓中</div>${t.current_price?`<div class="font-medium ${isLong?(t.current_price>=t.open_price?'up':'down'):(t.current_price<=t.open_price?'up':'down')}">@$${t.current_price.toFixed(2)}</div>`:'<div class="text-mute">—</div>'}`}
+            </div>
+            <span class="text-[11px] w-28 shrink-0 text-right font-bold ${pnlCls}">${pnlText}</span>
+            <span class="text-[11px] text-mute flex-1 truncate">${t.notes||''}</span>
+            <div class="flex gap-1 shrink-0">
+                <button class="btn btn-outline btn-xs" onclick="openForm('${t.id}')">编辑</button>
+                <button class="btn btn-outline btn-xs text-down" onclick="delTrade('${t.id}')">删除</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openForm(id){
+    editId=id||null;
+    document.getElementById('modal-title').textContent=id?'编辑记录':'添加记录';
+    document.getElementById('tf-submit').textContent=id?'更新':'提交';
+    document.getElementById('tf-symbol').value='';
+    document.getElementById('tf-dir').value='long';
+    document.getElementById('tf-qty').value='';
+    document.getElementById('tf-open-date').value='';
+    document.getElementById('tf-open-price').value='';
+    document.getElementById('tf-close-date').value='';
+    document.getElementById('tf-close-price').value='';
+    document.getElementById('tf-notes').value='';
+    if(id){
+        fetch('/api/trades').then(r=>r.json()).then(trades=>{
+            const t=trades.find(x=>x.id===id);
+            if(t){
+                document.getElementById('tf-symbol').value=t.symbol||'';
+                document.getElementById('tf-dir').value=t.direction||'long';
+                document.getElementById('tf-qty').value=t.quantity||'';
+                document.getElementById('tf-open-date').value=t.open_date||'';
+                document.getElementById('tf-open-price').value=t.open_price||'';
+                document.getElementById('tf-close-date').value=t.close_date||'';
+                document.getElementById('tf-close-price').value=t.close_price||'';
+                document.getElementById('tf-notes').value=t.notes||'';
+            }
+        });
+    }
+    document.getElementById('trade-modal').classList.remove('hidden');
+}
+
+function closeForm(){document.getElementById('trade-modal').classList.add('hidden');editId=null;}
+function closeModal(e){if(e.target===document.getElementById('trade-modal'))closeForm();}
+
+document.getElementById('tf-submit').onclick=async function(){
+    const body={
+        symbol:document.getElementById('tf-symbol').value,
+        direction:document.getElementById('tf-dir').value,
+        quantity:parseFloat(document.getElementById('tf-qty').value)||null,
+        open_date:document.getElementById('tf-open-date').value||null,
+        open_price:parseFloat(document.getElementById('tf-open-price').value)||null,
+        close_date:document.getElementById('tf-close-date').value||null,
+        close_price:parseFloat(document.getElementById('tf-close-price').value)||null,
+        notes:document.getElementById('tf-notes').value,
+    };
+    if(!body.symbol){alert('请输入股票代码');return;}
+    const url=editId?'/api/trades/'+editId:'/api/trades';
+    const method=editId?'PUT':'POST';
+    try{
+        await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        closeForm();
+        loadTrades();
+    }catch(e){alert('保存失败');}
+};
+
+async function delTrade(id){
+    if(!confirm('确认删除？'))return;
+    await fetch('/api/trades/'+id,{method:'DELETE'});
+    loadTrades();
+}
+
+loadTrades();
+</script>
+{% endblock %}
