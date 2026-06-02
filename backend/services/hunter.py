@@ -39,16 +39,23 @@ def get_sectors(market: str) -> list[str]:
 def get_symbols(market: str, sector: str) -> list[str]:
     discovery = discover_all_stocks()
     all_syms = discovery.get(market, [])
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for s in all_syms:
+        if s not in seen:
+            seen.add(s)
+            unique.append(s)
     if sector == "全部":
-        return all_syms
+        return unique
 
     db = SessionLocal()
     try:
         rows = db.query(StockCache.symbol).filter(
-            StockCache.symbol.in_([s.upper().replace('-', '.') for s in all_syms]),
+            StockCache.symbol.in_([s.upper().replace('-', '.') for s in unique]),
             StockCache.sector == sector,
         ).all()
-        return [r[0] for r in rows]
+        return list(dict.fromkeys([r[0] for r in rows]))
     finally:
         db.close()
 

@@ -231,7 +231,7 @@ def discover_all_stocks(force_refresh: bool = False) -> dict[str, list[str]]:
     if russell and len(russell) > 100:
         us.extend([s.replace('.', '-').replace(' ', '') for s in russell if s])
 
-    result["美股"] = list(dict.fromkeys(us)) if len(us) > 80 else _bundled_sp500() + _bundled_nasdaq100()
+    result["美股"] = list(dict.fromkeys(us)) if len(us) > 80 else list(dict.fromkeys(_bundled_sp500() + _bundled_nasdaq100()))
 
     # === CN ===
     csi300 = _fetch_wikipedia("https://en.wikipedia.org/wiki/CSI_300_Index", 1, 1)
