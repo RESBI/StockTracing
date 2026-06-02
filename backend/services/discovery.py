@@ -31,7 +31,7 @@ def _fetch_wikipedia(url: str, table_idx: int = 0, col_idx: int = 0) -> list[str
     try:
         import requests
         import pandas as pd
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "StockTracing/1.0"})
+        resp = requests.get(url, timeout=8, headers={"User-Agent": "StockTracing/1.0"})
         resp.raise_for_status()
         tables = pd.read_html(io.StringIO(resp.text))
         if tables and table_idx < len(tables):
@@ -210,94 +210,70 @@ def discover_all_stocks(force_refresh: bool = False) -> dict[str, list[str]]:
 
     result: dict[str, list[str]] = {}
 
-    # === US: multi-source merge ===
-    us_stocks = []
-    # Wikipedia S&P 500
-    sp500_wiki = _fetch_wikipedia("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", 0, 0)
-    if sp500_wiki and len(sp500_wiki) > 300:
-        sp500_wiki = [s.replace('.', '-').replace(' ', '') for s in sp500_wiki if s and not s.startswith('Symbol')]
-        us_stocks.extend(sp500_wiki)
-    # Wikipedia NASDAQ 100
-    ndx_wiki = _fetch_wikipedia("https://en.wikipedia.org/wiki/Nasdaq-100", 0, 1)
-    if ndx_wiki and len(ndx_wiki) > 50:
-        us_stocks.extend([s.replace(' ', '') for s in ndx_wiki if s])
-    # Wikipedia Russell 1000
+    # Helper: try Wikipedia source, fallback to bundled
+    def _merge_wiki(fetched, bundled, cleaner=None):
+        if fetched and len(fetched) > 10:
+            if cleaner:
+                fetched = cleaner(fetched)
+            return list(dict.fromkeys(fetched))
+        return bundled
+
+    # === US ===
+    sp500 = _fetch_wikipedia("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", 0, 0)
+    ndx = _fetch_wikipedia("https://en.wikipedia.org/wiki/Nasdaq-100", 0, 1)
     russell = _fetch_wikipedia("https://en.wikipedia.org/wiki/Russell_1000_Index", 0, 0)
+
+    us = []
+    if sp500 and len(sp500) > 200:
+        us.extend([s.replace('.', '-').replace(' ', '') for s in sp500 if s and not s.startswith('Symbol')])
+    if ndx and len(ndx) > 50:
+        us.extend([s.replace(' ', '') for s in ndx if s])
     if russell and len(russell) > 100:
-        us_stocks.extend([s.replace('.', '-').replace(' ', '') for s in russell if s])
-    # Fallback
-    if len(us_stocks) < 100:
-        us_stocks = _bundled_sp500() + _bundled_nasdaq100()
-    result["美股"] = list(dict.fromkeys(us_stocks))
+        us.extend([s.replace('.', '-').replace(' ', '') for s in russell if s])
 
-    # === CN: multi-source ===
-    cn_stocks = []
+    result["美股"] = list(dict.fromkeys(us)) if len(us) > 80 else _bundled_sp500() + _bundled_nasdaq100()
+
+    # === CN ===
     csi300 = _fetch_wikipedia("https://en.wikipedia.org/wiki/CSI_300_Index", 1, 1)
-    if csi300 and len(csi300) > 100:
-        for s in csi300:
-            s = s.strip()
-            if s.endswith('.SS') or s.endswith('.SZ'):
-                cn_stocks.append(s)
-            elif s.isdigit() and len(s) == 6:
-                cn_stocks.append(s + ('.SS' if s.startswith(('6', '9')) else '.SZ'))
-    # CSI 500
     csi500 = _fetch_wikipedia("https://en.wikipedia.org/wiki/CSI_500_Index", 1, 1)
-    if csi500 and len(csi500) > 100:
-        for s in csi500:
-            s = s.strip()
-            if s.endswith('.SS') or s.endswith('.SZ'):
-                cn_stocks.append(s)
-            elif s.isdigit() and len(s) == 6:
-                cn_stocks.append(s + ('.SS' if s.startswith(('6', '9')) else '.SZ'))
-    if len(cn_stocks) < 50:
-        cn_stocks = _bundled_csi300()
-    result["A股"] = list(dict.fromkeys(cn_stocks))
+    cn = []
+    for raw in [csi300, csi500]:
+        if raw and len(raw) > 30:
+            for s in raw:
+                s = s.strip()
+                if s.endswith('.SS') or s.endswith('.SZ'):
+                    cn.append(s)
+                elif s.isdigit() and len(s) == 6:
+                    cn.append(s + ('.SS' if s.startswith(('6', '9')) else '.SZ'))
+    result["A股"] = list(dict.fromkeys(cn)) if len(cn) > 30 else _bundled_csi300()
 
-    # === HK: multi-source ===
-    hk_stocks = []
+    # === HK ===
     hsi = _fetch_wikipedia("https://en.wikipedia.org/wiki/Hang_Seng_Index", 0, 2)
-    if hsi and len(hsi) > 30:
-        for s in hsi:
-            s = s.strip()
-            if s.endswith('.HK'):
-                hk_stocks.append(s)
-            elif s.isdigit() and len(s) <= 5:
-                hk_stocks.append(s.zfill(4) + '.HK')
-    # HSCEI (H-shares)
     hscei = _fetch_wikipedia("https://en.wikipedia.org/wiki/Hang_Seng_China_Enterprises_Index", 0, 1)
-    if hscei and len(hscei) > 20:
-        for s in hscei:
-            s = s.strip()
-            if s.endswith('.HK'):
-                hk_stocks.append(s)
-            elif s.isdigit() and len(s) <= 5:
-                hk_stocks.append(s.zfill(4) + '.HK')
-    if len(hk_stocks) < 30:
-        hk_stocks = _bundled_hsi()
-    result["港股"] = list(dict.fromkeys(hk_stocks))
+    hk = []
+    for raw in [hsi, hscei]:
+        if raw and len(raw) > 10:
+            for s in raw:
+                s = s.strip()
+                if s.endswith('.HK'):
+                    hk.append(s)
+                elif s.isdigit() and len(s) <= 5:
+                    hk.append(s.zfill(4) + '.HK')
+    result["港股"] = list(dict.fromkeys(hk)) if len(hk) > 20 else _bundled_hsi()
 
-    # === JP: multi-source ===
-    jp_stocks = []
+    # === JP ===
     nikkei = _fetch_wikipedia("https://en.wikipedia.org/wiki/Nikkei_225", 0, 1)
-    if nikkei and len(nikkei) > 100:
-        for s in nikkei:
-            s = s.strip()
-            if s.endswith('.T'):
-                jp_stocks.append(s)
-            elif s.isdigit():
-                jp_stocks.append(s + '.T')
-    # TOPIX 100
     topix = _fetch_wikipedia("https://en.wikipedia.org/wiki/TOPIX", 0, 1)
-    if topix and len(topix) > 50:
-        for s in topix:
-            s = s.strip()
-            if s.endswith('.T'):
-                jp_stocks.append(s)
-            elif s.isdigit():
-                jp_stocks.append(s + '.T')
-    if len(jp_stocks) < 50:
-        jp_stocks = _bundled_nikkei()
-    result["日股"] = list(dict.fromkeys(jp_stocks))
+    jp = []
+    for raw in [nikkei, topix]:
+        if raw and len(raw) > 20:
+            for s in raw:
+                s = s.strip()
+                if s.endswith('.T'):
+                    jp.append(s)
+                elif s.isdigit():
+                    jp.append(s + '.T')
+    result["日股"] = list(dict.fromkeys(jp)) if len(jp) > 30 else _bundled_nikkei()
 
     _save_discovery(result)
     return result
