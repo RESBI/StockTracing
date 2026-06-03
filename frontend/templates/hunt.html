@@ -14,7 +14,7 @@
             </div>
             <div>
                 <label class="text-xs text-mute block mb-1">领域</label>
-                <select id="hunt-sector" class="input py-1.5 text-sm w-36"></select>
+                <select id="hunt-sector" class="input py-1.5 text-sm w-36" onchange="autoLoadSession()"></select>
             </div>
             <div class="pt-4">
                 <button onclick="runHunt()" class="btn btn-acc btn-sm">开始狩猎</button>
@@ -78,6 +78,40 @@ async function loadSectors(){
     try{const secs=await api('/hunt/sectors?market='+encodeURIComponent(m));
         const sel=document.getElementById('hunt-sector');sel.innerHTML='';
         secs.forEach(s=>sel.innerHTML+=`<option value="${s}">${s}</option>`);
+    }catch(e){}
+    autoLoadSession();
+}
+async function autoLoadSession(){
+    const m=document.getElementById('hunt-market').value;
+    const s=document.getElementById('hunt-sector')?.value;
+    if(!m||!s)return;
+    try{
+        const rows=await api('/hunt/history');
+        // Find matching session
+        const match=rows.find(r=>r.market===m&&r.sector===s);
+        if(match){
+            const data=await api('/hunt/history/'+match.id);
+            document.getElementById('hunt-status').classList.add('hidden');
+            renderHuntResults(data);
+            document.getElementById('hunt-results').classList.remove('hidden');
+            return;
+        }
+        // Fallback: find latest session for this market, extract sector
+        const marketLatest=rows.find(r=>r.market===m);
+        if(marketLatest&&s!=='全部'){
+            const data=await api('/hunt/history/'+marketLatest.id);
+            const filtered=data.results.filter(r=>r.sector===s);
+            if(filtered.length){
+                document.getElementById('hunt-status').classList.add('hidden');
+                renderHuntResults({...data,results:filtered,total:filtered.length,sector:s});
+                document.getElementById('hunt-results').classList.remove('hidden');
+                return;
+            }
+        }
+        // Nothing found
+        document.getElementById('hunt-results').classList.add('hidden');
+        document.getElementById('hunt-status').classList.remove('hidden');
+        document.getElementById('hunt-status').innerHTML='<span class="text-mute text-sm">该组合暂无历史记录，点击"开始狩猎"</span>';
     }catch(e){}
 }
 
