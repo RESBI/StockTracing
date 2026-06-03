@@ -2,7 +2,7 @@
 
 > 本项目由本人使用 [OpenCode](https://github.com/anomalyco/opencode) 基于 DeepSeek V4 Pro 生成。本人仅负责项目大致结构设计与网页画面调整。
 
-![Demo](images/demo.gif)
+![Demo](images/GIF%2003-06-2026%2018-43-00.gif)
 
 实时追踪股票行情，技术指标计算，AI 分析总结，机构评级整合，交易记录管理，多市场狩猎扫描。
 

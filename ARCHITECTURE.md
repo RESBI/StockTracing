@@ -137,6 +137,26 @@ queue_symbols() 加入后台更新队列
 按总分降序排列，写入 hunt_session 表
 ```
 
+### 4.5 加密货币跟踪 (`crypto.py`)
+
+```
+Crypto API 数据源 (三层回退)
+  ├── Binance HTTP public API (klines + ticker)
+  ├── OKX HTTP public API (candles + ticker)
+  └── ccxt (Binance / OKX)
+  │
+  ▼
+get_crypto_info() / get_crypto_history() / get_crypto_tick()
+  ├── 实时价格 (USDT 交易对)
+  ├── OHLCV 历史 (1日~1年)
+  ├── 技术指标 (SMA/EMA/MACD/RSI/Bollinger/ATR/OBV/Stochastic)
+  ├── 周期分析 (D/W/M/Y 涨跌+信号)
+  └── Sparkline 走势图 (当日5分钟K线)
+  │
+  ▼
+符号存储: CRYPTO:BTC-USDT (避免与股票代码冲突)
+```
+
 ### 5. 技术指标计算 (`technical.py`)
 
 ```
@@ -211,6 +231,7 @@ DELETE → 删除记录
 | 新闻资讯 | 文件缓存 | 2h | 用户点击加载 |
 | Tick 价格 | 内存 dict | 120s | 后台线程 |
 | 5min 历史 | 内存 dict | — | get_tick 调用时 |
+| 加密货币 | Binance/OKX HTTP + ccxt | 实时 | 前端轮询 |
 | 交易所成分股 | 文件缓存 | 24h | 首次狩猎 |
 | 交易记录 | trades.json | — | 用户操作 |
 

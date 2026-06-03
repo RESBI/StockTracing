@@ -275,10 +275,28 @@ def get_tick(symbol: str) -> dict:
     # Sparkline: last 40 points from today's price history
     sparkline = [p for _, p in _price_history.get(sym, [])[-40:]] if sym in _price_history else []
 
+    # Extended hours data from background cache
+    ext = {}
+    cached_tick = get_updater().get_tick(sym)
+    if cached_tick:
+        ext = {
+            "pre_market_price": cached_tick.get("pre_market_price"),
+            "pre_market_change": cached_tick.get("pre_market_change"),
+            "post_market_price": cached_tick.get("post_market_price"),
+            "post_market_change": cached_tick.get("post_market_change"),
+            "regular_market_price": cached_tick.get("regular_market_price"),
+            "previous_close": cached_tick.get("previous_close"),
+        }
+
     return {
         "symbol": sym,
         "price": price_val,
         "change_5m": change_5m,
         "sparkline": sparkline,
-        "prev_close": None,
+        "prev_close": ext.get("previous_close"),
+        "pre_market": ext.get("pre_market_price"),
+        "pre_market_chg": ext.get("pre_market_change"),
+        "post_market": ext.get("post_market_price"),
+        "post_market_chg": ext.get("post_market_change"),
+        "regular_price": ext.get("regular_market_price"),
     }

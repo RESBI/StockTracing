@@ -68,16 +68,20 @@ class CacheUpdater:
         price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
         pre_price = info.get("preMarketPrice")
         post_price = info.get("postMarketPrice")
-        market_state = info.get("marketState", "")
+        regular_price = info.get("regularMarketPrice")
+        pre_change_pct = info.get("preMarketChangePercent")
+        post_change_pct = info.get("postMarketChangePercent")
 
         # Update tick cache with extended hours data
         self._ticks[sym] = {
             "price": price,
             "ts": time.time(),
             "pre_market_price": pre_price,
+            "pre_market_change": pre_change_pct,
             "post_market_price": post_price,
+            "post_market_change": post_change_pct,
+            "regular_market_price": regular_price,
             "previous_close": info.get("previousClose") or info.get("regularMarketPreviousClose"),
-            "market_state": market_state,
         }
 
         data = {
@@ -135,9 +139,11 @@ class CacheUpdater:
                 "price": tick["price"],
                 "change_5m": None,
                 "pre_market_price": tick.get("pre_market_price"),
+                "pre_market_change": tick.get("pre_market_change"),
                 "post_market_price": tick.get("post_market_price"),
+                "post_market_change": tick.get("post_market_change"),
+                "regular_market_price": tick.get("regular_market_price"),
                 "previous_close": tick.get("previous_close"),
-                "market_state": tick.get("market_state"),
             }
         return None
 

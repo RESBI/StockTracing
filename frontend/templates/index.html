@@ -104,7 +104,7 @@ function priceHTML(sym,curPrice,prevPrice,prevClose,flashCls='',crypto=false){
     if(diff.suffix)inner+=`<span class="price-suffix">${diff.suffix}</span>`;
     if(!diff.prefix&&!diff.changed&&!diff.suffix)inner=`<span class="price-slide-in">${curStr}</span>`;
 
-    return`<span class="text-base font-bold w-28 shrink-0 price-cell ${dir} ${flashCls}" data-symbol="${sym}" data-price="${curPrice||''}" data-crypto="${crypto?'1':'0'}">${inner}</span>`;
+    return`<span class="text-base font-bold price-cell ${dir} ${flashCls}" data-symbol="${sym}" data-price="${curPrice||''}" data-crypto="${crypto?'1':'0'}">${inner}</span>`;
 }
 
 function updatePriceCell(cell,newPrice){
@@ -185,13 +185,16 @@ function makeBar(sym, data){
     }
     priceMap[sym]={price:curPrice, prevClose:info.previous_close};
 
-    return `<div class="card px-4 py-1.5 hover:border-acc/30 cursor-pointer transition-colors" style="min-height:44px" onclick="location.href='/stock/${sym}'">
+    return `<div class="card px-4 py-1.5 hover:border-acc/30 cursor-pointer transition-colors" style="min-height:52px" onclick="location.href='/stock/${sym}'">
         <div class="flex items-center gap-3 h-full">
             <div class="w-28 shrink-0 leading-tight">
                 <span class="font-bold text-sm block">${displaySym}</span>
                 <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
             </div>
-            ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
+            <div class="w-28 shrink-0 leading-tight">
+                ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
+                <span class="ext-info text-[10px] block" data-symbol="${sym}"></span>
+            </div>
             <svg class="sparkline shrink-0" data-symbol="${sym}" width="48" height="18" style="overflow:visible"></svg>
             <div class="w-20 shrink-0 text-center text-xs">
                 <span class="tick-today font-medium ${todayCls}" data-symbol="${sym}" data-today="${todayChg||''}">${todayStr}</span>
@@ -319,6 +322,19 @@ async function refreshPrices(){
                         spark.innerHTML=`<polyline points="${points.trim()}" fill="none" stroke="${cur!=null&&cur>=pts[0]?'#00B887':'#F54D4D'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
                     }
                 }
+            }
+            // Update extended hours info
+            const ext=grid.querySelector(`.ext-info[data-symbol="${sym}"]`);
+            if(ext){
+                let html='';
+                if(t.pre_market!=null&&t.pre_market_chg!=null){
+                    html+=`<span class="${t.pre_market_chg>=0?'up':'down'}">盘前 $${Number(t.pre_market).toFixed(2)} ${t.pre_market_chg>=0?'+':''}${Number(t.pre_market_chg).toFixed(2)}%</span>`;
+                }
+                if(t.post_market!=null&&t.post_market_chg!=null){
+                    if(html)html+=' | ';
+                    html+=`<span class="${t.post_market_chg>=0?'up':'down'}">盘后 $${Number(t.post_market).toFixed(2)} ${t.post_market_chg>=0?'+':''}${Number(t.post_market_chg).toFixed(2)}%</span>`;
+                }
+                ext.innerHTML=html;
             }
         }catch(e){}
     }
