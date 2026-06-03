@@ -241,6 +241,29 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
             if hist and hist.data:
                 records = hist.data.get("records", [])
                 symbol_histories[sym] = {r["date"][:16]: r["close"] for r in records if r.get("close")}
+            else:
+                # Fetch hourly data on demand
+                try:
+                    import yfinance as yf
+                    ticker = yf.Ticker(sym)
+                    df = ticker.history(period="5d", interval="60m")
+                    if not df.empty:
+                        records = []
+                        for idx, row in df.iterrows():
+                            close_val = float(row["Close"])
+                            if close_val and close_val > 0:
+                                key = str(idx).replace(" ", "T")[:16]
+                                records.append({"date": key, "close": close_val})
+                        if records:
+                            symbol_histories[sym] = {r["date"]: r["close"] for r in records}
+                            # Save to cache
+                            from datetime import timezone as tz
+                            now = datetime.now(tz.utc)
+                            db.add(AnalysisCache(symbol=sym, analysis_type="history_5d_60m",
+                                                 data={"records": records}, updated_at=now))
+                            db.commit()
+                except Exception:
+                    pass
         if sym not in symbol_histories:
             for period in ["1y", "6mo", "3mo", "1mo"]:
                 key = f"history_{period}_1d"
@@ -271,11 +294,23 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
     start = datetime.strptime(all_dates[0], "%Y-%m-%d")
     end = datetime.now()
 
-    # For each day, compute total portfolio value
+    # For hourly, limit to recent 5 days
+    if interval == "1h":
+        recent_start = end - timedelta(days=5)
+        if recent_start > start:
+            start = recent_start
+        step = timedelta(hours=1)
+    else:
+        step = timedelta(days=1)
+
+    # Compute portfolio value at each time step
     curve = []
     current = start
     while current <= end:
-        day_str = current.strftime("%Y-%m-%d")
+        if interval == "1h":
+            key = current.strftime("%Y-%m-%dT%H:%M")
+        else:
+            key = current.strftime("%Y-%m-%d")
         day_total = 0.0
         for t in trades:
             open_p = t.get("open_price")
@@ -291,42 +326,45 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
             cd = cd_raw[:10] if cd_raw else None
             sym = t.get("symbol", "").upper()
 
-            # Check if this trade was active on this day
-            if od > day_str:
-                continue  # Not opened yet
-            if cd and cd < day_str:
-                continue  # Already closed
+            # Check active
+            od_dt = datetime.strptime(od, "%Y-%m-%d")
+            cd_dt = datetime.strptime(cd, "%Y-%m-%d") if cd else None
+            if current < od_dt:
+                continue
+            if cd_dt and current >= cd_dt:
+                continue
 
-            # Get price for this day
+            # Get price
             price_map = symbol_histories.get(sym, {})
-            price = price_map.get(day_str)
+            price = price_map.get(key)
+
+            if price is None and interval == "1h":
+                # Try nearby hourly keys
+                for offset in range(1, 4):
+                    prev = (current - timedelta(hours=offset)).strftime("%Y-%m-%dT%H:%M")
+                    if prev in price_map:
+                        price = price_map[prev]
+                        break
+            if price is None:
+                day_key = current.strftime("%Y-%m-%d")
+                price = price_map.get(day_key)
 
             if price is None:
-                if cd and cd == day_str:
+                if cd and current.date().isoformat() == cd:
                     price = t.get("close_price") or price
-                elif od == day_str:
+                elif od == current.date().isoformat():
                     price = open_p
-                else:
-                    # Use last known price
-                    prev_date = current - timedelta(days=1)
-                    while prev_date >= start:
-                        prev_str = prev_date.strftime("%Y-%m-%d")
-                        prev_p = price_map.get(prev_str)
-                        if prev_p:
-                            price = prev_p
-                            break
-                        prev_date -= timedelta(days=1)
-                    if price is None:
-                        price = open_p
 
-            if price:
-                if direction == "long":
-                    pnl = (price - open_p) * qty
-                else:
-                    pnl = (open_p - price) * qty
-                day_total += pnl
+            if not price:
+                continue
 
-        curve.append({"date": day_str, "pnl": round(day_total, 2)})
-        current += timedelta(days=1)
+            if direction == "long":
+                pnl = (price - open_p) * qty
+            else:
+                pnl = (open_p - price) * qty
+            day_total += pnl
+
+        curve.append({"date": key, "pnl": round(day_total, 2)})
+        current += step
 
     return curve
