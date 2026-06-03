@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block nav_home %}text-text bg-white/5{% endblock %}
 {% block content %}
-<div id="dashboard-wrap" class="p-6">
+<div id="dashboard-wrap" class="p-6 flex flex-col" style="height:calc(100vh - 0px)">
     <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-4">
             <h1 class="text-xl font-bold">仪表盘</h1>
@@ -55,9 +55,9 @@
     </div>
 
     <!-- Dashboard: horizontal bar list -->
-    <div class="overflow-x-auto">
+    <div class="flex-1 overflow-y-auto overflow-x-auto" style="min-height:0">
         <!-- Header row -->
-        <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-mute font-medium border-b border-bord mb-1" style="min-height:32px">
+        <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-mute font-medium border-b border-bord mb-1 sticky top-0 bg-bg z-10" style="min-height:32px">
             <span class="w-28 shrink-0">代码 / 名称</span>
             <span class="w-28 shrink-0">价格</span>
             <span style="width:48px" class="shrink-0 text-center">走势</span>
