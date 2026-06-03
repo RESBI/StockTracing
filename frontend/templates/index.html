@@ -59,7 +59,7 @@
         <!-- Header row -->
         <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-mute font-medium border-b border-bord mb-1" style="min-height:32px">
             <span class="w-28 shrink-0">代码 / 名称</span>
-            <span class="w-28 shrink-0 text-center">价格</span>
+            <span class="w-28 shrink-0">价格</span>
             <span style="width:48px" class="shrink-0 text-center">走势</span>
             <span class="w-20 shrink-0 text-center">5m 涨跌</span>
             <span class="w-20 shrink-0 text-center">D 涨跌/信号</span>
@@ -184,10 +184,8 @@ function makeBar(sym, data){
                 <span class="font-bold text-sm block">${sym}</span>
                 <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
             </div>
-            <div class="price-block shrink-0" data-symbol="${sym}">
-                ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
-                <svg class="sparkline" data-symbol="${sym}" width="44" height="18" style="overflow:visible;margin-left:2px"></svg>
-            </div>
+            ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
+            <svg class="sparkline shrink-0" data-symbol="${sym}" width="48" height="18" style="overflow:visible"></svg>
             <div class="w-20 shrink-0 text-center text-xs">
                 <span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span>
             </div>
