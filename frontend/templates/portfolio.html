@@ -43,6 +43,15 @@
     <!-- Holdings detail -->
     <div class="card p-4">
         <h3 class="text-sm font-semibold text-mute mb-3">持仓明细</h3>
+        <!-- Header -->
+        <div class="flex items-center gap-4 px-2 mb-1 text-xs text-mute font-medium">
+            <span class="w-28 shrink-0">代码 / 名称</span>
+            <span class="w-14 shrink-0 text-center">股数</span>
+            <span class="w-20 shrink-0 text-center">成本价</span>
+            <span class="w-20 shrink-0 text-center">现价</span>
+            <span class="w-16 shrink-0 text-center">走势</span>
+            <span class="w-20 shrink-0 text-center">今日</span>
+        </div>
         <div id="holdings-detail" class="space-y-1.5"></div>
     </div>
 </div>
@@ -113,30 +122,24 @@ function renderHoldings(holdings){
     c.innerHTML=holdings.map(h=>{
         const cost=h.open_price*h.quantity;
         const val=h.current_price*h.quantity;
-        return `<div class="card px-4 py-2 border border-bord/60" style="min-height:40px">
+        return `<div class="border-b border-bord/30 py-2 px-2 hover:bg-white/[0.02]">
             <div class="flex items-center gap-4">
                 <div class="w-28 shrink-0 leading-tight">
                     <span class="font-bold text-sm block">${h.symbol}</span>
-                    <span class="text-mute text-[10px] block">${h.direction==='long'?'做多':'做空'} ${h.quantity}股</span>
+                    <span class="text-mute text-[10px] block">${h.direction==='long'?'做多':'做空'}</span>
+                </div>
+                <span class="w-14 shrink-0 text-center text-xs font-medium">${h.quantity}</span>
+                <div class="w-20 shrink-0 text-center text-xs">
+                    <span class="text-mute block">$${h.open_price.toFixed(2)}</span>
+                    <span class="text-[10px] text-mute">$${cost.toFixed(0)}</span>
                 </div>
                 <div class="w-20 shrink-0 text-center text-xs">
-                    <span class="text-mute block">成本价</span><span>$${h.open_price.toFixed(2)}</span>
+                    <span class="${h.pnl>=0?'up':'down'} block">$${h.current_price.toFixed(2)}</span>
+                    <span class="${val>=cost?'up':'down'} text-[10px]">$${val.toFixed(0)}</span>
                 </div>
+                <div class="w-16 shrink-0 text-center text-xs text-mute">—</div>
                 <div class="w-20 shrink-0 text-center text-xs">
-                    <span class="text-mute block">现价</span><span class="${h.pnl>=0?'up':'down'}">$${h.current_price.toFixed(2)}</span>
-                </div>
-                <div class="w-16 shrink-0 text-center text-xs">
-                    <span class="text-mute block">走势</span><span>—</span>
-                </div>
-                <div class="w-20 shrink-0 text-center text-xs">
-                    <span class="text-mute block">今日</span><span class="${h.pnl>=0?'up':'down'}">${h.pnl_pct>=0?'+':''}${h.pnl_pct}%</span>
-                </div>
-                <div class="flex-1"></div>
-                <div class="w-20 shrink-0 text-right text-xs">
-                    <span class="text-mute block">成本</span><span>$${cost.toFixed(2)}</span>
-                </div>
-                <div class="w-20 shrink-0 text-right text-xs">
-                    <span class="text-mute block">总值</span><span class="${h.pnl>=0?'up':'down'}">$${val.toFixed(2)}</span>
+                    <span class="${h.pnl>=0?'up':'down'}">${h.pnl_pct>=0?'+':''}${h.pnl_pct}%</span>
                 </div>
             </div>
         </div>`;
