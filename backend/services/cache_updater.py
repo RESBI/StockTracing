@@ -47,8 +47,21 @@ class CacheUpdater:
 
     @retry_on_rate_limit
     def _update_one(self, symbol: str) -> None:
-        import yfinance as yf
         sym = symbol.upper().strip()
+
+        # Skip crypto - handled by separate service
+        if sym.startswith("CRYPTO:") or "-USDT" in sym or "-USD" in sym:
+            # Update tick cache for crypto
+            try:
+                from backend.services.crypto import get_crypto_info
+                info = get_crypto_info(sym.replace("CRYPTO:", ""))
+                if info and info.get("current_price"):
+                    self._ticks[sym] = {"price": info["current_price"], "ts": time.time()}
+            except Exception:
+                pass
+            return
+
+        import yfinance as yf
         ticker = yf.Ticker(sym)
         info = ticker.info or {}
 
