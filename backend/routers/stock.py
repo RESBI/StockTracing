@@ -15,6 +15,12 @@ from backend.services.trades import (
     get_all_trades, get_trade, create_trade, update_trade, 
     delete_trade, get_trade_stats
 )
+from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, CRYPTO_SYMBOLS
+
+
+def _is_crypto(symbol: str) -> bool:
+    s = symbol.upper().strip()
+    return any(s == c.split("-")[0] or s == c for c in CRYPTO_SYMBOLS)
 from backend.utils.watchlist import load_watchlist, add_to_watchlist, remove_from_watchlist
 from backend.database.models import LLMCache, SessionLocal, HuntSession
 from backend.config import _load_json_config, save_json_config, CONFIG_FILE
@@ -31,6 +37,11 @@ def _resolve_sym(symbol: str) -> str:
 @router.get("/stock/{symbol}")
 def api_stock_info(symbol: str, refresh: bool = False):
     try:
+        if _is_crypto(symbol):
+            info = get_crypto_info(symbol)
+            if info:
+                return info
+            raise HTTPException(status_code=404)
         return get_stock_info(symbol, force_refresh=refresh)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"无法获取 {symbol}: {str(e)}")
@@ -39,6 +50,10 @@ def api_stock_info(symbol: str, refresh: bool = False):
 @router.get("/stock/{symbol}/tick")
 def api_tick(symbol: str):
     try:
+        if _is_crypto(symbol):
+            t = get_crypto_tick(symbol)
+            if t: return t
+            raise HTTPException(status_code=404)
         return get_tick(symbol)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -47,6 +62,8 @@ def api_tick(symbol: str):
 @router.get("/stock/{symbol}/history")
 def api_stock_history(symbol: str, period: str = "6mo", interval: str = "1d"):
     try:
+        if _is_crypto(symbol):
+            return get_crypto_history(symbol, period=period)
         return get_stock_history(symbol, period=period, interval=interval)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -123,6 +140,24 @@ def api_summary(symbol: str):
 
 @router.get("/stock/{symbol}/full")
 def api_full_analysis(symbol: str, refresh: bool = False):
+    if _is_crypto(symbol):
+        result = {}
+        try:
+            result["info"] = get_crypto_info(symbol) or {}
+        except Exception:
+            result["info"] = {}
+        try:
+            result["history"] = get_crypto_history(symbol, period="6mo")
+        except Exception:
+            result["history"] = []
+        result["analyst"] = {}
+        result["financials"] = {}
+        result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
+        result["periods"] = {"changes": {}, "signals": {}}
+        result["summary"] = {"enabled": False, "summary": ""}
+        result["news"] = []
+        return result
+
     sym = _resolve_sym(symbol)
     result = {}
 

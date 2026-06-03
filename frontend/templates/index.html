@@ -86,8 +86,8 @@ function diffPrice(oldS,newS){
     return{prefix:newS.slice(0,i),changed:newS.slice(i,jNew),suffix:newS.slice(jNew)};
 }
 
-function priceHTML(sym,curPrice,prevPrice,prevClose,flashCls=''){
-    const curStr=fmtPrice(curPrice);
+function priceHTML(sym,curPrice,prevPrice,prevClose,flashCls='',crypto=false){
+    const curStr=crypto?Number(curPrice).toFixed(4):fmtPrice(curPrice);
     const prevStr=prevPrice!=null?fmtPrice(prevPrice):null;
     const diff=diffPrice(prevStr||'',curStr);
     let dir='';
@@ -100,12 +100,13 @@ function priceHTML(sym,curPrice,prevPrice,prevClose,flashCls=''){
     if(diff.suffix)inner+=`<span class="price-suffix">${diff.suffix}</span>`;
     if(!diff.prefix&&!diff.changed&&!diff.suffix)inner=`<span class="price-slide-in">${curStr}</span>`;
 
-    return`<span class="text-base font-bold w-24 shrink-0 price-cell ${dir} ${flashCls}" data-symbol="${sym}" data-price="${curPrice||''}">${inner}</span>`;
+    return`<span class="text-base font-bold w-24 shrink-0 price-cell ${dir} ${flashCls}" data-symbol="${sym}" data-price="${curPrice||''}" data-crypto="${crypto?'1':'0'}">${inner}</span>`;
 }
 
 function updatePriceCell(cell,newPrice){
     const oldStr=cell.textContent.replace(/\s/g,'');
-    const newStr=fmtPrice(newPrice);
+    const isC=cell.getAttribute('data-crypto')==='1';
+    const newStr=isC?Number(newPrice).toFixed(4):fmtPrice(newPrice);
     if(oldStr===newStr)return false;
     const diff=diffPrice(oldStr,newStr);
     let html='';
@@ -167,6 +168,7 @@ function makeBar(sym, data){
 
     const curPrice=info.current_price;
     const prevPrice=priceMap[sym];
+    const _crypto=isCrypto(info);
     let flashClass='';
     if(prevPrice!=null&&curPrice!=null&&prevPrice!==curPrice){
         flashClass=curPrice>prevPrice?'price-flash-up':'price-flash-down';
@@ -179,7 +181,7 @@ function makeBar(sym, data){
                 <span class="font-bold text-sm block">${sym}</span>
                 <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
             </div>
-            ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass)}
+            ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
             <div class="w-20 shrink-0 text-center text-xs">
                 <span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span>
             </div>

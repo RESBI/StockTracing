@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import DATA_DIR
+from backend.services.crypto import discover_crypto
 
 DISCOVERY_CACHE = DATA_DIR / "exchange_stocks.json"
 DISCOVERY_TTL = 86400  # 24h
@@ -274,6 +275,9 @@ def discover_all_stocks(force_refresh: bool = False) -> dict[str, list[str]]:
                 elif s.isdigit():
                     jp.append(s + '.T')
     result["日股"] = list(dict.fromkeys(jp)) if len(jp) > 30 else _bundled_nikkei()
+
+    # Crypto
+    result["加密货币"] = discover_crypto()
 
     _save_discovery(result)
     return result
