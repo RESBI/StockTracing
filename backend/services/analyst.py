@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import yfinance as yf
 from sqlalchemy.orm import Session
 
-from backend.database.models import StockCache, SessionLocal
+from backend.database.models import StockCache, AnalysisCache, SessionLocal
 from backend.config import CACHE_TTL_SECONDS
 
 
@@ -15,9 +15,81 @@ def _safe_float(val: Any) -> float | None:
         return None
 
 
+def _fetch_ratings(sym: str) -> dict:
+    """Fetch recent ratings and upgrades, cached in AnalysisCache."""
+    db = SessionLocal()
+    try:
+        existing = db.query(AnalysisCache).filter(
+            AnalysisCache.symbol == sym,
+            AnalysisCache.analysis_type == "analyst_ratings",
+        ).first()
+        if existing and existing.updated_at:
+            updated = existing.updated_at.replace(tzinfo=timezone.utc) if existing.updated_at.tzinfo is None else existing.updated_at
+            age = (datetime.now(timezone.utc) - updated).total_seconds()
+            if age < CACHE_TTL_SECONDS:
+                return existing.data
+    finally:
+        db.close()
+
+    result = {"recent_ratings": [], "upgrades_downgrades": []}
+    try:
+        ticker = yf.Ticker(sym)
+        # Recent ratings
+        recs = ticker.recommendations
+        if recs is not None and not recs.empty:
+            recent = recs.tail(5)
+            for _, row in recent.iterrows():
+                result["recent_ratings"].append({
+                    "firm": str(row.get("Firm", "")),
+                    "action": str(row.get("To Grade", "")),
+                    "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
+                })
+    except Exception:
+        pass
+
+    try:
+        ticker = yf.Ticker(sym)
+        upgrades = ticker.upgrades_downgrades
+        if upgrades is not None and not upgrades.empty:
+            recent_up = upgrades.tail(5)
+            for _, row in recent_up.iterrows():
+                result["upgrades_downgrades"].append({
+                    "firm": str(row.get("Firm", "")),
+                    "from_grade": str(row.get("FromGrade", "")),
+                    "to_grade": str(row.get("ToGrade", "")),
+                    "action": str(row.get("Action", "")),
+                    "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
+                })
+    except Exception:
+        pass
+
+    # Save to cache
+    db = SessionLocal()
+    try:
+        existing = db.query(AnalysisCache).filter(
+            AnalysisCache.symbol == sym,
+            AnalysisCache.analysis_type == "analyst_ratings",
+        ).first()
+        now = datetime.now(timezone.utc)
+        if existing:
+            existing.data = result
+            existing.updated_at = now
+        else:
+            db.add(AnalysisCache(symbol=sym, analysis_type="analyst_ratings",
+                                 data=result, updated_at=now))
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+    return result
+
+
 def get_analyst_info(symbol: str) -> dict[str, Any]:
     sym = symbol.upper().strip()
     db: Session = SessionLocal()
+    ratings = {"recent_ratings": [], "upgrades_downgrades": []}
 
     # Try StockCache first
     try:
@@ -42,10 +114,15 @@ def get_analyst_info(symbol: str) -> dict[str, Any]:
                 }
                 if result["current_price"] and result["target_mean"]:
                     result["upside_percent"] = round((result["target_mean"] - result["current_price"]) / result["current_price"] * 100, 2)
+                # Fetch ratings from cache
+                ratings = _fetch_ratings(sym)
+                result["recent_ratings"] = ratings["recent_ratings"]
+                result["upgrades_downgrades"] = ratings["upgrades_downgrades"]
                 return result
     finally:
         db.close()
-    ticker = yf.Ticker(symbol.upper().strip())
+
+    ticker = yf.Ticker(sym)
     info = ticker.info or {}
 
     result = {
@@ -57,6 +134,8 @@ def get_analyst_info(symbol: str) -> dict[str, Any]:
         "recommendation": info.get("recommendationKey", ""),
         "recommendation_mean": _safe_float(info.get("recommendationMean")),
         "current_price": _safe_float(info.get("currentPrice") or info.get("regularMarketPrice")),
+        "recent_ratings": [],
+        "upgrades_downgrades": [],
     }
 
     if result["current_price"] and result["target_mean"]:
@@ -65,34 +144,9 @@ def get_analyst_info(symbol: str) -> dict[str, Any]:
     else:
         result["upside_percent"] = None
 
-    try:
-        recs = ticker.recommendations
-        if recs is not None and not recs.empty:
-            recent = recs.tail(5)
-            result["recent_ratings"] = []
-            for _, row in recent.iterrows():
-                result["recent_ratings"].append({
-                    "firm": str(row.get("Firm", "")),
-                    "action": str(row.get("To Grade", "")),
-                    "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
-                })
-    except Exception:
-        result["recent_ratings"] = []
-
-    try:
-        upgrades = ticker.upgrades_downgrades
-        if upgrades is not None and not upgrades.empty:
-            recent_up = upgrades.tail(5)
-            result["upgrades_downgrades"] = []
-            for _, row in recent_up.iterrows():
-                result["upgrades_downgrades"].append({
-                    "firm": str(row.get("Firm", "")),
-                    "from_grade": str(row.get("FromGrade", "")),
-                    "to_grade": str(row.get("ToGrade", "")),
-                    "action": str(row.get("Action", "")),
-                    "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
-                })
-    except Exception:
-        result["upgrades_downgrades"] = []
+    # Fetch ratings from cache/yfinance
+    ratings = _fetch_ratings(sym)
+    result["recent_ratings"] = ratings["recent_ratings"]
+    result["upgrades_downgrades"] = ratings["upgrades_downgrades"]
 
     return result
