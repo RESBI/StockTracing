@@ -137,13 +137,14 @@ async function doSearch(){
         const info=await api('/stock/'+encodeURIComponent(q));
         const r=document.getElementById('search-results');
         r.classList.remove('hidden');
+        const isC=info.sector==='加密货币';
         r.innerHTML=`<div class="flex items-center justify-between bg-bg rounded-lg p-3">
-            <div><span class="font-semibold">${info.symbol}</span> <span class="text-mute text-xs ml-2">${info.name||''}</span></div>
-            <a href="/stock/${info.symbol}" class="btn btn-acc btn-sm">查看</a></div>`;
+            <div><span class="font-semibold">${isC?info.symbol:info.symbol}</span> <span class="text-mute text-xs ml-2">${info.name||''}</span></div>
+            <a href="/stock/${info.symbol||q.toUpperCase()}" class="btn btn-acc btn-sm">查看</a></div>`;
     }catch(e){
         const r=document.getElementById('search-results');
         r.classList.remove('hidden');
-        r.innerHTML=`<p class="text-down text-sm">未找到 "${q}"</p>`;
+        r.innerHTML=`<p class="text-down text-sm">未找到 "${q}"。提示：加密货币直接输入代码如 BTC、ETH</p>`;
     }
     hideLoading();
 }

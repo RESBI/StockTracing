@@ -36,7 +36,32 @@ def get_crypto_info(symbol: str) -> dict[str, Any] | None:
 
     exchange = _get_client()
     if not exchange:
-        return None
+        # Return minimal info when exchange unreachable
+        name = sym.split("-")[0]
+        return {
+            "symbol": name,
+            "full_symbol": sym,
+            "name": name,
+            "current_price": None,
+            "previous_close": None,
+            "day_high": None,
+            "day_low": None,
+            "volume": None,
+            "change_24h": None,
+            "market_cap": None,
+            "recommendation": "",
+            "target_mean_price": None,
+            "target_high_price": None,
+            "target_low_price": None,
+            "number_of_analysts": 0,
+            "pe_ratio": None,
+            "eps": None,
+            "dividend_yield": None,
+            "beta": None,
+            "sector": "加密货币",
+            "industry": "数字货币",
+            "raw_info": {},
+        }
 
     try:
         ticker = exchange.fetch_ticker(sym)
