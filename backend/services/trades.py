@@ -217,6 +217,27 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
             "sector": m["sector"],
         })
 
+    # Build trade events for P&L curve markers
+    events = []
+    for t in trades:
+        od = (t.get("open_date") or "")[:10]
+        cd = (t.get("close_date") or "")[:10] if t.get("close_date") else None
+        sym = t.get("symbol", "")
+        price = t.get("open_price")
+        qty = t.get("quantity", 0)
+        direction = t.get("direction", "long")
+        if od and price and qty:
+            events.append({
+                "date": od,
+                "label": f"{sym}@{price}×{qty} {'多' if direction == 'long' else '空'}",
+                "type": "buy" if direction == "long" else "sell",
+            })
+        if cd and t.get("close_price") and qty:
+            events.append({
+                "date": cd,
+                "label": f"{sym}@{t['close_price']}×{qty} 平",
+                "type": "close",
+            })
     # P&L curve data
     pnl_curve = _compute_pnl_curve(db, interval)
     db.close()
@@ -234,6 +255,7 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
         "symbol_pie": symbol_pie,
         "sector_pie": sector_pie,
         "pnl_curve": pnl_curve,
+        "events": events,
     }
 
 

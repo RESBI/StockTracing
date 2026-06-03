@@ -56,7 +56,7 @@ async function loadPortfolio(){
         document.getElementById('s-syms').textContent=data.symbol_pie.length;
         renderPies(data);
         renderHoldings(data.holdings);
-        renderPnlCurve(data.pnl_curve);
+        renderPnlCurve(data.pnl_curve, data.events);
     }catch(e){}
 }
 
@@ -65,7 +65,7 @@ async function loadPnlCurve(interval){
     document.getElementById('btn-1h').className='btn '+(interval==='1h'?'btn-acc':'btn-outline')+' btn-xs';
     try{
         const data=await api('/trades/portfolio?interval='+interval);
-        renderPnlCurve(data.pnl_curve);
+        renderPnlCurve(data.pnl_curve, data.events);
     }catch(e){}
 }
 
@@ -137,15 +137,40 @@ function renderHoldings(holdings){
     }).join('');
 }
 
-function renderPnlCurve(curve){
+function renderPnlCurve(curve, events){
     if(!curve.length)return;
     const ctx=document.getElementById('pnl-chart').getContext('2d');
     if(pnlChart)pnlChart.destroy();
     const lastPnl=curve[curve.length-1].pnl;
-    pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(d=>d.date),datasets:[{label:'累计盈亏',data:curve.map(d=>d.pnl),
-        borderColor:lastPnl>=0?'#00B887':'#F54D4D',backgroundColor:(lastPnl>=0?'#00B887':'#F54D4D')+'10',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
+
+    // Map events to curve points
+    const curveDates=curve.map(d=>d.date);
+    const buyPoints=[], sellPoints=[];
+    if(events){
+        events.forEach(e=>{
+            let idx=curveDates.indexOf(e.date);
+            if(idx<0){for(let i=0;i<curveDates.length;i++){if(curveDates[i]>=e.date){idx=i;break;}}}
+            if(idx>=0&&idx<curve.length){
+                (e.type==='close'?sellPoints:buyPoints).push({x:curve[idx].date,y:curve[idx].pnl,label:e.label});
+            }
+        });
+    }
+
+    const datasets=[{label:'累计盈亏',data:curve.map(d=>d.pnl),
+        borderColor:lastPnl>=0?'#00B887':'#F54D4D',backgroundColor:(lastPnl>=0?'#00B887':'#F54D4D')+'10',fill:true,tension:.3,pointRadius:0,borderWidth:2}];
+    if(buyPoints.length){
+        datasets.push({label:'开仓',data:buyPoints.map(p=>({x:p.x,y:p.y})),type:'scatter',
+            backgroundColor:'#00B887',borderColor:'#00B887',pointRadius:5,pointStyle:'triangle',rotation:0,showLine:false});
+    }
+    if(sellPoints.length){
+        datasets.push({label:'平仓',data:sellPoints.map(p=>({x:p.x,y:p.y})),type:'scatter',
+            backgroundColor:'#F54D4D',borderColor:'#F54D4D',pointRadius:5,pointStyle:'triangleDown',showLine:false});
+    }
+
+    pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(d=>d.date),datasets},
         options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-            plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1}},
+            plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1,
+                callbacks:{label:function(ctx){const bp=buyPoints.find(p=>p.x===ctx.label);if(bp)return bp.label;const sp=sellPoints.find(p=>p.x===ctx.label);if(sp)return sp.label;return '盈亏: $'+ctx.raw.toFixed(2);}}}},
             scales:{x:{ticks:{color:'#4A5466',maxTicksLimit:8,autoSkip:true},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466',callback:v=>'$'+v.toFixed(0)},grid:{color:'#1A2030'}}}}});
 }
 
