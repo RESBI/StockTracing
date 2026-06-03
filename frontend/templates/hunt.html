@@ -192,21 +192,17 @@ function renderHuntResults(data){
                     <span class="text-mute text-[10px] truncate block">${r.name||''}</span>
                 </div>
                 <span class="text-base font-bold w-20 shrink-0">$ ${r.price?.toFixed(2)||'—'}</span>
-                <div class="shrink-0 space-y-0.5">
-                <div class="flex gap-3 shrink-0 text-center text-[10px]">
+                <div class="shrink-0 grid grid-cols-4 gap-x-2 text-center text-[10px]" style="width:180px">
                     <div><span class="text-mute block">PE</span><span>${pe}</span></div>
                     <div><span class="text-mute block">目标价</span><span>${targetPrice}</span></div>
                     <div><span class="text-mute block">目标</span><span class="${upside>0?'up':upside<0?'down':''}">${upsideStr}</span></div>
                     <div><span class="text-mute block">信号</span><span class="${buyN>sellN?'up':sellN>buyN?'down':''}">${buyN}B/${sellN}S</span></div>
-                </div>
-                <div class="flex gap-3 shrink-0 text-center text-[10px]">
                     <div><span class="text-mute block">EPS</span><span>${eps}</span></div>
                     <div><span class="text-mute block">股息</span><span>${divY}</span></div>
                     <div><span class="text-mute block">Beta</span><span>${beta}</span></div>
                     <div><span class="text-mute block">分析师</span><span>${anCount}</span></div>
                 </div>
-                </div>
-                <div class="flex-1 space-y-0.5">
+                <div class="flex-1 space-y-0.5 pl-2">
                     ${bar('bg-up',sc.value?.score||0,30,'价值')}
                     ${bar('bg-up',sc.analyst?.score||0,25,'机构')}
                     ${bar('bg-up',sc.technical?.score||0,25,'技术')}

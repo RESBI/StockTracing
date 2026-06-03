@@ -270,8 +270,12 @@ def get_tick(symbol: str) -> dict:
     if best_p is not None and best_p > 0 and price_val:
         change_5m = round((price_val - best_p) / best_p * 100, 2)
 
+    # Sparkline: last 40 points from today's price history
+    sparkline = [p for _, p in _price_history.get(sym, [])[-40:]] if sym in _price_history else []
+
     return {
         "symbol": sym,
         "price": price_val,
         "change_5m": change_5m,
+        "sparkline": sparkline,
     }

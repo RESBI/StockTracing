@@ -182,6 +182,7 @@ function makeBar(sym, data){
                 <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
             </div>
             ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
+            <svg class="sparkline shrink-0" data-symbol="${sym}" width="50" height="18" style="overflow:visible"></svg>
             <div class="w-20 shrink-0 text-center text-xs">
                 <span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span>
             </div>
@@ -192,8 +193,8 @@ function makeBar(sym, data){
             <span class="tag ${comp?tagCls(comp.signal):'tag-mute'} shrink-0 w-14 text-center">${comp?signalLabel(comp.signal):'—'}</span>
             <div class="flex-1 flex items-center gap-4 text-xs">
                 <span><span class="text-mute">PE </span>${info.pe_ratio?.toFixed(1)||'—'}</span>
-                <span><span class="text-mute">市值 </span>${fmtNum(info.market_cap)}</span>
-                <span><span class="text-mute">目标 </span><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
+                <span><span class="text-mute">目标 </span>${info.target_mean_price?info.target_mean_price.toFixed(0):'—'}</span>
+                <span><span class="text-mute">空间 </span><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
             </div>
         </div>
     </div>`;
@@ -268,6 +269,24 @@ async function refreshPrices(){
                     m5.setAttribute('data-5m',String(chg5m));
                     m5.textContent=(chg5m>=0?'+':'')+chg5m.toFixed(2)+'%';
                     m5.className='tick-5m font-medium '+(chg5m>=0?'up':'down');
+                }
+            }
+
+            // Update sparkline
+            const spark=grid.querySelector(`.sparkline[data-symbol="${sym}"]`);
+            if(spark&&t.sparkline&&t.sparkline.length>2){
+                const pts=t.sparkline.filter(p=>p!=null);
+                if(pts.length>2){
+                    const min=Math.min(...pts),max=Math.max(...pts);
+                    const range=max-min||1;
+                    const w=50,h=18;
+                    let points='';
+                    pts.forEach((p,i)=>{
+                        const x=(i/(pts.length-1))*w;
+                        const y=h-1-((p-min)/range)*(h-4);
+                        points+=`${x.toFixed(1)},${y.toFixed(1)} `;
+                    });
+                    spark.innerHTML=`<polyline points="${points.trim()}" fill="none" stroke="${cur!=null&&cur>=pts[0]?'#00B887':'#F54D4D'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
                 }
             }
         }catch(e){}
