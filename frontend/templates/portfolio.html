@@ -75,15 +75,20 @@ async function loadPnlCurve(interval){
 function renderPies(data){
     const colors=['#296BEF','#00B887','#F59E0B','#F54D4D','#805ad5','#3182ce','#38a169','#dd6b20','#e53e3e','#8b5cf6'];
 
-    const sCtx=document.getElementById('symbol-pie').getContext('2d');
-    if(symbolChart)symbolChart.destroy();
-    symbolChart=new Chart(sCtx,{type:'doughnut',data:{labels:data.symbol_pie.map(d=>d.name),datasets:[{data:data.symbol_pie.map(d=>d.value),backgroundColor:colors}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#848E9C',font:{size:10}}}}}});
-
-    const secCtx=document.getElementById('sector-pie').getContext('2d');
-    if(sectorChart)sectorChart.destroy();
-    sectorChart=new Chart(secCtx,{type:'doughnut',data:{labels:data.sector_pie.map(d=>d.name),datasets:[{data:data.sector_pie.map(d=>d.value),backgroundColor:colors}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#848E9C',font:{size:10}}}}}});
+    function makePie(ctx, chartVar, items){
+        if(chartVar)chartVar.destroy();
+        const sorted=[...items].sort((a,b)=>b.value-a.value);
+        const total=sorted.reduce((s,i)=>s+i.value,0);
+        return new Chart(ctx,{type:'doughnut',data:{labels:sorted.map(d=>d.name),datasets:[{data:sorted.map(d=>d.value),backgroundColor:colors}]},
+            options:{responsive:true,maintainAspectRatio:false,
+                plugins:{
+                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:8,
+                        sort:(a,b)=>sorted.findIndex(x=>x.name===b.text)-sorted.findIndex(x=>x.name===a.text)}},
+                    tooltip:{callbacks:{label:ctx=>ctx.label+': '+(ctx.raw/total*100).toFixed(1)+'% ($'+ctx.raw.toFixed(2)+')'}}
+                }}});
+    }
+    symbolChart=makePie(document.getElementById('symbol-pie').getContext('2d'),symbolChart,data.symbol_pie);
+    sectorChart=makePie(document.getElementById('sector-pie').getContext('2d'),sectorChart,data.sector_pie);
 }
 
 function renderHoldings(holdings){
