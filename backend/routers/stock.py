@@ -15,7 +15,7 @@ from backend.services.trades import (
     get_all_trades, get_trade, create_trade, update_trade, 
     delete_trade, get_trade_stats
 )
-from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, CRYPTO_SYMBOLS
+from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, get_crypto_periods, CRYPTO_SYMBOLS
 
 
 def _is_crypto(symbol: str) -> bool:
@@ -171,6 +171,7 @@ def api_full_analysis(symbol: str, refresh: bool = False):
             result["history"] = []
         result["analyst"] = {}
         result["financials"] = {}
+        result["periods"] = get_crypto_periods(csym) or {"changes": {}, "signals": {}}
         try:
             tech = get_crypto_indicators(csym)
             if tech:

@@ -252,6 +252,75 @@ def discover_crypto() -> list[str]:
     return CRYPTO_SYMBOLS
 
 
+def get_crypto_periods(symbol: str) -> dict[str, Any]:
+    """Compute D/W/M/Y changes and signals for crypto using OHLCV data."""
+    sym = symbol.upper().strip()
+    if "-" not in sym:
+        sym = sym + "-USDT"
+
+    # Fetch 1y of daily data
+    closes = []
+    try:
+        import requests
+        url = f"https://api.binance.com/api/v3/klines?symbol={sym.replace('-','')}&interval=1d&limit=365"
+        resp = requests.get(url, timeout=8)
+        if resp.status_code == 200:
+            closes = [float(r[4]) for r in resp.json()]
+    except Exception:
+        pass
+
+    if not closes:
+        # Try ccxt
+        exchange = _get_client()
+        if exchange:
+            try:
+                ohlcv = exchange.fetch_ohlcv(sym, "1d", limit=365)
+                closes = [c[4] for c in ohlcv]
+            except Exception:
+                pass
+
+    if len(closes) < 20:
+        return {"changes": {}, "signals": {}}
+
+    import numpy as np
+    from backend.config import INDICATOR_PARAMS
+    p = INDICATOR_PARAMS
+
+    def _quick(cl, period_days):
+        """Quick buy/sell/neutral signal for a lookback window."""
+        seg = cl[-period_days:] if len(cl) >= period_days else cl
+        n = len(seg)
+        if n < 5:
+            return "neutral"
+        sma_short = float(np.mean(seg[-min(5, n):]))
+        sma_long = float(np.mean(seg[-min(10, n):]))
+        if sma_short > sma_long * 1.01:
+            return "buy"
+        elif sma_short < sma_long * 0.99:
+            return "sell"
+        return "neutral"
+
+    changes = {}
+    signals = {}
+    lookbacks = {"D": 1, "W": 7, "M": 30, "Y": 365}
+    windows = {"D": 7, "W": 14, "M": 60, "Y": 365}
+
+    for label, lb in lookbacks.items():
+        if lb >= len(closes):
+            continue
+        start = closes[-lb - 1]
+        end = closes[-1]
+        chg = round((end - start) / start * 100, 2) if start > 0 else 0
+        changes[label] = chg
+
+        w = min(windows[label], len(closes))
+        sig = _quick(closes, w)
+        signals[label] = {"rsi": sig, "trend": sig, "volume": "neutral", "overall": sig}
+
+    result = {"changes": changes, "signals": signals}
+    return result
+
+
 def get_crypto_indicators(symbol: str) -> dict[str, Any] | None:
     """Fetch OHLCV and compute full technical indicators for crypto."""
     sym = symbol.upper().strip()
