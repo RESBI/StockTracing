@@ -163,42 +163,57 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
     trades = _load()
     db = SessionLocal()
 
-    holdings = []
+    # Merge holdings by symbol (weighted average cost)
+    merged = {}
     total_value = 0.0
     sector_map = defaultdict(float)
-
     for t in trades:
-        sym = t.get("symbol", "")
+        sym = t.get("symbol", "").upper()
         open_p = t.get("open_price")
         qty = t.get("quantity", 0) or 0
         direction = t.get("direction", "long")
         is_open = t.get("status") == "open"
 
-        sc = db.query(StockCache).filter(StockCache.symbol == sym.upper()).first()
+        sc = db.query(StockCache).filter(StockCache.symbol == sym).first()
         cur_p = sc.current_price if sc else None
         sector = (sc.sector or "未知") if sc else "未知"
 
-        if is_open and open_p and cur_p:
-            if direction == "long":
-                pnl = (cur_p - open_p) * qty
-                pnl_pct = (cur_p - open_p) / open_p * 100
-            else:
-                pnl = (open_p - cur_p) * qty
-                pnl_pct = (open_p - cur_p) / cur_p * 100
-            value = cur_p * qty
-            total_value += value
-            sector_map[sector] += value
-            holdings.append({
-                "symbol": sym,
-                "direction": direction,
-                "quantity": qty,
-                "open_price": open_p,
-                "current_price": cur_p,
-                "pnl": round(pnl, 2),
-                "pnl_pct": round(pnl_pct, 2),
-                "value": round(value, 2),
-                "sector": sector,
-            })
+        if not is_open or not open_p or not cur_p:
+            continue
+
+        key = sym
+        if key not in merged:
+            merged[key] = {"symbol": sym, "direction": direction, "total_qty": 0, "total_cost": 0.0, "cur_p": cur_p, "sector": sector}
+        m = merged[key]
+        m["total_qty"] += qty
+        m["total_cost"] += open_p * qty
+
+    holdings = []
+    for sym, m in merged.items():
+        avg_price = m["total_cost"] / m["total_qty"] if m["total_qty"] > 0 else 0
+        cur_p = m["cur_p"]
+        direction = m["direction"]
+        qty = m["total_qty"]
+        if direction == "long":
+            pnl = (cur_p - avg_price) * qty
+            pnl_pct = (cur_p - avg_price) / avg_price * 100 if avg_price > 0 else 0
+        else:
+            pnl = (avg_price - cur_p) * qty
+            pnl_pct = (avg_price - cur_p) / cur_p * 100 if cur_p > 0 else 0
+        value = cur_p * qty
+        total_value += value
+        sector_map[m["sector"]] += value
+        holdings.append({
+            "symbol": sym,
+            "direction": direction,
+            "quantity": qty,
+            "open_price": round(avg_price, 2),
+            "current_price": cur_p,
+            "pnl": round(pnl, 2),
+            "pnl_pct": round(pnl_pct, 2),
+            "value": round(value, 2),
+            "sector": m["sector"],
+        })
 
     # P&L curve data
     pnl_curve = _compute_pnl_curve(db, interval)
