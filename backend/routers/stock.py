@@ -13,7 +13,7 @@ from backend.services.discovery import discover_all_stocks
 from backend.services.cache_updater import get_updater
 from backend.services.trades import (
     get_all_trades, get_trade, create_trade, update_trade, 
-    delete_trade, get_trade_stats
+    delete_trade, get_trade_stats, get_portfolio
 )
 from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, get_crypto_periods, CRYPTO_SYMBOLS
 
@@ -384,6 +384,11 @@ def api_get_trades():
 @router.get("/trades/stats")
 def api_trade_stats():
     return get_trade_stats()
+
+
+@router.get("/trades/portfolio")
+def api_portfolio():
+    return get_portfolio()
 
 
 @router.post("/trades")

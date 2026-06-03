@@ -155,3 +155,134 @@ def get_trade_stats() -> dict[str, Any]:
         "loss_count": loss_count,
         "win_rate": round(win_count / len(closed) * 100, 1) if closed else 0,
     }
+
+
+def get_portfolio() -> dict[str, Any]:
+    from backend.database.models import StockCache, SessionLocal
+    from collections import defaultdict
+    trades = _load()
+    db = SessionLocal()
+
+    holdings = []
+    total_value = 0.0
+    sector_map = defaultdict(float)
+
+    for t in trades:
+        sym = t.get("symbol", "")
+        open_p = t.get("open_price")
+        qty = t.get("quantity", 0) or 0
+        direction = t.get("direction", "long")
+        is_open = t.get("status") == "open"
+
+        sc = db.query(StockCache).filter(StockCache.symbol == sym.upper()).first()
+        cur_p = sc.current_price if sc else None
+        sector = (sc.sector or "未知") if sc else "未知"
+
+        if is_open and open_p and cur_p:
+            if direction == "long":
+                pnl = (cur_p - open_p) * qty
+                pnl_pct = (cur_p - open_p) / open_p * 100
+            else:
+                pnl = (open_p - cur_p) * qty
+                pnl_pct = (open_p - cur_p) / cur_p * 100
+            value = cur_p * qty
+            total_value += value
+            sector_map[sector] += value
+            holdings.append({
+                "symbol": sym,
+                "direction": direction,
+                "quantity": qty,
+                "open_price": open_p,
+                "current_price": cur_p,
+                "pnl": round(pnl, 2),
+                "pnl_pct": round(pnl_pct, 2),
+                "value": round(value, 2),
+                "sector": sector,
+            })
+
+    # P&L curve data
+    pnl_curve = _compute_pnl_curve(db)
+    db.close()
+
+    # Symbol pie
+    symbol_pie = [{"name": h["symbol"], "value": round(h["value"], 2)} for h in holdings]
+
+    # Sector pie
+    sector_pie = [{"name": k, "value": round(v, 2)} for k, v in sector_map.items()]
+
+    return {
+        "holdings": holdings,
+        "total_value": round(total_value, 2),
+        "symbol_pie": symbol_pie,
+        "sector_pie": sector_pie,
+        "pnl_curve": pnl_curve,
+    }
+
+
+def _compute_pnl_curve(db) -> list[dict]:
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    trades = _load()
+    if not trades:
+        return []
+
+    # Find date range
+    all_dates = []
+    for t in trades:
+        od = t.get("open_date", "")
+        cd = t.get("close_date", "")
+        if od:
+            all_dates.append(od[:10])
+        if cd:
+            all_dates.append(cd[:10])
+
+    if not all_dates:
+        return []
+
+    all_dates.sort()
+    start = datetime.strptime(all_dates[0], "%Y-%m-%d")
+    end = datetime.now()
+
+    # Build daily P&L
+    daily_pnl = defaultdict(float)
+    for t in trades:
+        open_p = t.get("open_price")
+        close_p = t.get("close_price")
+        qty = t.get("quantity", 0) or 0
+        direction = t.get("direction", "long")
+        od = t.get("open_date", "")[:10]
+        cd = t.get("close_date", "")[:10]
+        sym = t.get("symbol", "")
+
+        if not od or not open_p:
+            continue
+
+        is_closed = cd and close_p
+        if is_closed:
+            if direction == "long":
+                pnl = (close_p - open_p) * qty
+            else:
+                pnl = (open_p - close_p) * qty
+            cd_dt = datetime.strptime(cd, "%Y-%m-%d")
+            daily_pnl[cd_dt.strftime("%Y-%m-%d")] += pnl
+        else:
+            # Open position: use current price
+            sc = db.query(StockCache).filter(StockCache.symbol == sym.upper()).first() if db else None
+            cur_p = sc.current_price if sc and sc.current_price else open_p
+            if direction == "long":
+                pnl = (cur_p - open_p) * qty
+            else:
+                pnl = (open_p - cur_p) * qty
+            daily_pnl[end.strftime("%Y-%m-%d")] += pnl
+
+    # Build cumulative curve
+    curve = []
+    cumulative = 0.0
+    current = start
+    while current <= end:
+        day_str = current.strftime("%Y-%m-%d")
+        cumulative += daily_pnl.get(day_str, 0)
+        curve.append({"date": day_str, "pnl": round(cumulative, 2)})
+        current += timedelta(days=1)
+
+    return curve
