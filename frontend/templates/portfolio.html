@@ -5,27 +5,26 @@
     <h1 class="text-xl font-bold mb-1">持仓分析</h1>
     <p class="text-sm text-mute mb-6">当前持仓、盈亏分布与收益曲线</p>
 
-    <!-- Summary -->
-    <div class="grid grid-cols-4 gap-3 mb-6" id="summary-row">
-        <div class="card p-3 text-center"><p class="text-xs text-mute">持仓成本</p><p class="text-xl font-bold" id="s-cost">—</p></div>
-        <div class="card p-3 text-center"><p class="text-xs text-mute">持仓总值</p><p class="text-xl font-bold" id="s-total">—</p></div>
-        <div class="card p-3 text-center"><p class="text-xs text-mute">总浮盈</p><p class="text-xl font-bold" id="s-pnl">—</p></div>
-        <div class="card p-3 text-center"><p class="text-xs text-mute">标的总数</p><p class="text-xl font-bold" id="s-syms">—</p></div>
+    <!-- Summary row 1 -->
+    <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓成本</p><p class="text-2xl font-bold" id="s-cost">—</p></div>
+        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓总值</p><p class="text-2xl font-bold" id="s-total">—</p></div>
+    </div>
+    <!-- Summary row 2 -->
+    <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">总浮盈</p><p class="text-2xl font-bold" id="s-pnl">—</p></div>
+        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">标的总数</p><p class="text-2xl font-bold" id="s-syms">—</p></div>
     </div>
 
-    <!-- Charts row -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <!-- Pie charts -->
+    <div class="grid grid-cols-2 gap-4 mb-6">
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">标的占比</h3>
-            <div style="position:relative;height:200px"><canvas id="symbol-pie"></canvas></div>
+            <div style="position:relative;height:220px"><canvas id="symbol-pie"></canvas></div>
         </div>
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
-            <div style="position:relative;height:200px"><canvas id="sector-pie"></canvas></div>
-        </div>
-        <div class="card p-4">
-            <h3 class="text-sm font-semibold text-mute mb-3">持仓明细</h3>
-            <div id="holdings-list" class="space-y-1.5 max-h-[200px] overflow-y-auto text-xs"></div>
+            <div style="position:relative;height:220px"><canvas id="sector-pie"></canvas></div>
         </div>
     </div>
 
@@ -40,6 +39,12 @@
         </div>
         <div style="position:relative;height:280px"><canvas id="pnl-chart"></canvas></div>
     </div>
+
+    <!-- Holdings detail -->
+    <div class="card p-4">
+        <h3 class="text-sm font-semibold text-mute mb-3">持仓明细</h3>
+        <div id="holdings-detail" class="space-y-1.5"></div>
+    </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -49,13 +54,12 @@ let symbolChart=null,sectorChart=null,pnlChart=null;
 async function loadPortfolio(){
     try{
         const data=await api('/trades/portfolio?interval=1h');
-        const totalCost=data.total_cost;
-        document.getElementById('s-cost').textContent='$'+totalCost.toFixed(2);
+        document.getElementById('s-cost').textContent='$'+data.total_cost.toFixed(2);
         document.getElementById('s-total').textContent='$'+data.total_value.toFixed(2);
         const totalPnl=data.holdings.reduce((s,h)=>s+h.pnl,0);
         const pnlEl=document.getElementById('s-pnl');
         pnlEl.textContent='$'+totalPnl.toFixed(2);
-        pnlEl.className='text-xl font-bold '+(totalPnl>=0?'up':'down');
+        pnlEl.className='text-2xl font-bold '+(totalPnl>=0?'up':'down');
         document.getElementById('s-syms').textContent=data.symbol_pie.length;
         renderPies(data);
         renderHoldings(data.holdings);
@@ -85,7 +89,7 @@ function renderPies(data){
         return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:colors}]},
             options:{responsive:true,maintainAspectRatio:false,
                 plugins:{
-                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:12,boxWidth:8,usePointStyle:true,
+                    legend:{position:'right',labels:{color:'#848E9C',font:{size:12},padding:14,boxWidth:10,usePointStyle:true,
                         generateLabels:function(chart){
                             const ds=chart.data.datasets[0];
                             return chart.data.labels.map((l,i)=>({
@@ -93,7 +97,7 @@ function renderPies(data){
                                 fillStyle:ds.backgroundColor[i],
                                 strokeStyle:ds.backgroundColor[i],
                                 lineWidth:0,hidden:false,index:i,
-                                fontColor:'#848E9C',pointStyle:'circle',pointStyleWidth:6
+                                fontColor:'#848E9C',pointStyle:'circle',pointStyleWidth:8
                             }));
                         }}},
                     tooltip:{callbacks:{label:ctx=>ctx.label+': '+pcts[ctx.dataIndex]+' ($'+values[ctx.dataIndex].toFixed(2)+')'}}
@@ -104,13 +108,39 @@ function renderPies(data){
 }
 
 function renderHoldings(holdings){
-    const c=document.getElementById('holdings-list');
-    if(!holdings.length){c.innerHTML='<p class="text-mute">暂无持仓</p>';return;}
-    c.innerHTML=holdings.map(h=>`<div class="flex justify-between py-1 border-b border-bord/30 last:border-0">
-        <span class="font-medium">${h.symbol}</span>
-        <span class="text-mute">${h.quantity}股</span>
-        <span class="${h.pnl>=0?'up':'down'}">${h.pnl>=0?'+':''}${h.pnl.toFixed(2)} (${h.pnl_pct>=0?'+':''}${h.pnl_pct}%)</span>
-    </div>`).join('');
+    const c=document.getElementById('holdings-detail');
+    if(!holdings.length){c.innerHTML='<p class="text-mute text-sm text-center py-4">暂无持仓</p>';return;}
+    c.innerHTML=holdings.map(h=>{
+        const cost=h.open_price*h.quantity;
+        const val=h.current_price*h.quantity;
+        return `<div class="card px-4 py-2 border border-bord/60" style="min-height:40px">
+            <div class="flex items-center gap-4">
+                <div class="w-28 shrink-0 leading-tight">
+                    <span class="font-bold text-sm block">${h.symbol}</span>
+                    <span class="text-mute text-[10px] block">${h.direction==='long'?'做多':'做空'} ${h.quantity}股</span>
+                </div>
+                <div class="w-20 shrink-0 text-center text-xs">
+                    <span class="text-mute block">成本价</span><span>$${h.open_price.toFixed(2)}</span>
+                </div>
+                <div class="w-20 shrink-0 text-center text-xs">
+                    <span class="text-mute block">现价</span><span class="${h.pnl>=0?'up':'down'}">$${h.current_price.toFixed(2)}</span>
+                </div>
+                <div class="w-16 shrink-0 text-center text-xs">
+                    <span class="text-mute block">走势</span><span>—</span>
+                </div>
+                <div class="w-20 shrink-0 text-center text-xs">
+                    <span class="text-mute block">今日</span><span class="${h.pnl>=0?'up':'down'}">${h.pnl_pct>=0?'+':''}${h.pnl_pct}%</span>
+                </div>
+                <div class="flex-1"></div>
+                <div class="w-20 shrink-0 text-right text-xs">
+                    <span class="text-mute block">成本</span><span>$${cost.toFixed(2)}</span>
+                </div>
+                <div class="w-20 shrink-0 text-right text-xs">
+                    <span class="text-mute block">总值</span><span class="${h.pnl>=0?'up':'down'}">$${val.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function renderPnlCurve(curve){
