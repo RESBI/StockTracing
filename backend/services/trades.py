@@ -255,6 +255,8 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
             # Fetch real hourly data
             try:
                 import yfinance as yf
+                import logging
+                logging.getLogger('yfinance').setLevel(logging.ERROR)
                 ticker = yf.Ticker(sym)
                 df = ticker.history(period="5d", interval="60m")
                 if not df.empty:
