@@ -171,6 +171,16 @@ function renderHuntResults(data){
         const rec=r.recommendation||'—';
         const buyN=(sc.technical?.details||[]).filter(d=>d.includes('买入')).length||0;
         const sellN=(sc.technical?.details||[]).filter(d=>d.includes('卖出')).length||0;
+        // Row 2 metrics
+        const eps=r.eps?r.eps.toFixed(2):'—';
+        const anCount=r.number_of_analysts||0;
+        const divY=r.dividend_yield?(r.dividend_yield*100).toFixed(1)+'%':'—';
+        const beta=r.beta?r.beta.toFixed(2):'—';
+        // Score banner
+        let bannerText='',bannerCls='';
+        if(r.total_score>=60){bannerText='综合评价：偏多 📈';bannerCls='bg-up';}
+        else if(r.total_score>=40){bannerText='综合评价：中性 📊';bannerCls='bg-warn';}
+        else{bannerText='综合评价：偏空 📉';bannerCls='bg-down';}
 
         return`<div class="card px-4 py-2 hover:border-acc/30 cursor-pointer" onclick="location.href='/stock/${r.symbol}'">
             <div class="flex items-center gap-3">
@@ -186,6 +196,12 @@ function renderHuntResults(data){
                     <div><span class="text-mute block">目标</span><span class="${upside>0?'up':upside<0?'down':''}">${upsideStr}</span></div>
                     <div><span class="text-mute block">信号</span><span class="${buyN>sellN?'up':sellN>buyN?'down':''}">${buyN}B/${sellN}S</span></div>
                 </div>
+                <div class="flex gap-3 shrink-0 text-center text-[10px]">
+                    <div><span class="text-mute block">EPS</span><span>${eps}</span></div>
+                    <div><span class="text-mute block">分析师</span><span>${anCount}</span></div>
+                    <div><span class="text-mute block">股息</span><span>${divY}</span></div>
+                    <div><span class="text-mute block">Beta</span><span>${beta}</span></div>
+                </div>
                 <div class="flex-1 space-y-0.5">
                     ${bar('bg-up',sc.value?.score||0,30,'价值')}
                     ${bar('bg-up',sc.analyst?.score||0,25,'机构')}
@@ -196,8 +212,9 @@ function renderHuntResults(data){
                     <span class="text-lg font-bold ${scoreColor}">${r.total_score}</span>
                     <span class="text-[10px] text-mute block">/100</span>
                 </div>
-                <span class="tag ${tagCls(r.total_score>=60?'buy':r.total_score>=40?'sell':'neutral')} shrink-0 w-14 text-center">${r.total_score>=60?'推荐':r.total_score>=40?'关注':'一般'}</span>
+                <span class="tag ${bannerCls} shrink-0 w-14 text-center">${r.total_score>=60?'推荐':r.total_score>=40?'关注':'一般'}</span>
             </div>
+            <div class="mt-1 ml-9 text-[10px]"><span class="${bannerCls} px-2 py-0.5 rounded">${bannerText}</span></div>
         </div>`;
     }).join('');
 }
