@@ -15,7 +15,7 @@ from backend.services.trades import (
     get_all_trades, get_trade, create_trade, update_trade, 
     delete_trade, get_trade_stats
 )
-from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, CRYPTO_SYMBOLS
+from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, CRYPTO_SYMBOLS
 
 
 def _is_crypto(symbol: str) -> bool:
@@ -28,10 +28,12 @@ def _is_crypto(symbol: str) -> bool:
 
 
 def _crypto_sym(symbol: str) -> str:
-    """Strip CRYPTO: prefix for crypto symbols."""
+    """Strip CRYPTO: prefix, return clean trading pair."""
     s = symbol.upper().strip()
     if s.startswith("CRYPTO:"):
-        return s[7:]
+        s = s[7:]
+    if not ("-" in s):
+        s = s + "-USDT"
     return s
 from backend.utils.watchlist import load_watchlist, add_to_watchlist, remove_from_watchlist
 from backend.database.models import LLMCache, SessionLocal, HuntSession
@@ -101,6 +103,10 @@ def api_analyst(symbol: str):
 @router.get("/stock/{symbol}/technical")
 def api_technical(symbol: str):
     try:
+        if _is_crypto(symbol):
+            r = get_crypto_indicators(_crypto_sym(symbol))
+            if r: return r
+            raise HTTPException(status_code=404)
         return calculate_all_indicators(_resolve_sym(symbol))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -165,7 +171,20 @@ def api_full_analysis(symbol: str, refresh: bool = False):
             result["history"] = []
         result["analyst"] = {}
         result["financials"] = {}
-        result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
+        try:
+            tech = get_crypto_indicators(csym)
+            if tech:
+                result["technical"] = {
+                    "latest_price": tech.get("latest_price"),
+                    "signals": tech.get("signals"),
+                    "rsi": tech.get("rsi", [])[-1] if tech.get("rsi") else None,
+                    "macd": {k: v[-1] if v else None for k, v in tech.get("macd", {}).items()},
+                    "bollinger": {k: v[-1] if v else None for k, v in tech.get("bollinger", {}).items()},
+                }
+            else:
+                result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
+        except Exception:
+            result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
         result["periods"] = {"changes": {}, "signals": {}}
         result["summary"] = {"enabled": False, "summary": ""}
         result["news"] = []
@@ -241,7 +260,9 @@ def api_get_watchlist():
 def api_add_watchlist(symbol: str):
     sym = _resolve_sym(symbol)
     if _is_crypto(sym) and not sym.startswith("CRYPTO:"):
-        sym = "CRYPTO:" + sym.replace("-USDT","").replace("-USD","")
+        # Store as CRYPTO:BTC-USDT (full pair)
+        base = sym.replace("-USDT","").replace("-USD","")
+        sym = "CRYPTO:" + base + "-USDT"
     return {"symbols": add_to_watchlist(sym)}
 
 

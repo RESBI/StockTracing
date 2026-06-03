@@ -250,3 +250,154 @@ def _fetch_sparkline(symbol: str) -> list[float]:
 
 def discover_crypto() -> list[str]:
     return CRYPTO_SYMBOLS
+
+
+def get_crypto_indicators(symbol: str) -> dict[str, Any] | None:
+    """Fetch OHLCV and compute full technical indicators for crypto."""
+    sym = symbol.upper().strip()
+    if "-" not in sym:
+        sym = sym + "-USDT"
+
+    # Try ccxt first for 1y daily data
+    data = None
+    exchange = _get_client()
+    if exchange:
+        try:
+            ohlcv = exchange.fetch_ohlcv(sym, "1d", limit=365)
+            if ohlcv:
+                data = {
+                    "closes": [c[4] for c in ohlcv],
+                    "highs": [c[2] for c in ohlcv],
+                    "lows": [c[3] for c in ohlcv],
+                    "volumes": [c[5] for c in ohlcv],
+                    "opens": [c[1] for c in ohlcv],
+                }
+        except Exception:
+            pass
+
+    # Fallback: Binance HTTP klines
+    if not data:
+        try:
+            import requests
+            bin_sym = sym.replace("-", "")
+            url = f"https://api.binance.com/api/v3/klines?symbol={bin_sym}&interval=1d&limit=365"
+            resp = requests.get(url, timeout=8)
+            if resp.status_code == 200:
+                rows = resp.json()
+                data = {
+                    "closes": [float(r[4]) for r in rows],
+                    "highs": [float(r[2]) for r in rows],
+                    "lows": [float(r[3]) for r in rows],
+                    "volumes": [float(r[5]) for r in rows],
+                    "opens": [float(r[1]) for r in rows],
+                }
+        except Exception:
+            pass
+
+    if not data or len(data["closes"]) < 20:
+        return None
+
+    import numpy as np
+    from backend.config import INDICATOR_PARAMS
+    from backend.services.technical import _generate_signals
+    closes = np.array(data["closes"])
+    highs = np.array(data["highs"])
+    lows = np.array(data["lows"])
+    volumes = np.array(data["volumes"])
+    opens = np.array(data["opens"])
+
+    p = INDICATOR_PARAMS
+
+    def _sma(arr, period):
+        result = np.full(len(arr), np.nan)
+        for i in range(period - 1, len(arr)):
+            result[i] = np.mean(arr[i - period + 1 : i + 1])
+        return result
+
+    def _ema(arr, period):
+        result = np.full(len(arr), np.nan)
+        result[period - 1] = np.mean(arr[:period])
+        mult = 2 / (period + 1)
+        for i in range(period, len(arr)):
+            result[i] = (arr[i] - result[i - 1]) * mult + result[i - 1]
+        return result
+
+    def _round(arr):
+        return [round(float(x), 4) if not np.isnan(x) else None for x in arr]
+
+    result: dict[str, Any] = {"symbol": sym}
+
+    # SMA
+    sma_short = _sma(closes, p["sma"]["short"])
+    sma_long = _sma(closes, p["sma"]["long"])
+    sma_signal = _sma(closes, p["sma"]["signal"])
+    result["sma"] = {f"sma_{p['sma']['short']}": _round(sma_short), f"sma_{p['sma']['long']}": _round(sma_long), f"sma_{p['sma']['signal']}": _round(sma_signal)}
+
+    # EMA / MACD
+    ema_12 = _ema(closes, 12)
+    ema_26 = _ema(closes, 26)
+    macd_line = ema_12 - ema_26
+    macd_signal = _ema(macd_line, 9)
+    macd_histogram = macd_line - macd_signal
+    result["macd"] = {"macd_line": _round(macd_line), "signal_line": _round(macd_signal), "histogram": _round(macd_histogram)}
+
+    # RSI
+    period = p["rsi"]["period"]
+    delta = np.diff(closes, prepend=closes[0])
+    gain = np.where(delta > 0, delta, 0.0)
+    loss = np.where(delta < 0, -delta, 0.0)
+    avg_gain = np.full(len(closes), np.nan)
+    avg_loss = np.full(len(closes), np.nan)
+    avg_gain[period] = np.mean(gain[1 : period + 1])
+    avg_loss[period] = np.mean(loss[1 : period + 1])
+    for i in range(period + 1, len(closes)):
+        avg_gain[i] = (avg_gain[i - 1] * (period - 1) + gain[i]) / period
+        avg_loss[i] = (avg_loss[i - 1] * (period - 1) + loss[i]) / period
+    rs = np.divide(avg_gain, avg_loss, out=np.full_like(avg_gain, np.nan), where=avg_loss != 0)
+    rsi = 100 - (100 / (1 + rs))
+    result["rsi"] = _round(rsi)
+
+    # Bollinger
+    bb_period = 20
+    middle = _sma(closes, bb_period)
+    std_arr = np.full(len(closes), np.nan)
+    for i in range(bb_period - 1, len(closes)):
+        std_arr[i] = np.std(closes[i - bb_period + 1 : i + 1])
+    upper = middle + 2 * std_arr
+    lower = middle - 2 * std_arr
+    result["bollinger"] = {"upper": _round(upper), "middle": _round(middle), "lower": _round(lower)}
+
+    # ATR
+    tr = np.full(len(closes), np.nan)
+    for i in range(1, len(closes)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+    atr = np.concatenate([np.full(1, np.nan), _sma(tr[1:], 14)])
+    result["atr"] = _round(atr)
+
+    # OBV
+    obv = np.zeros(len(closes))
+    for i in range(1, len(closes)):
+        if closes[i] > closes[i - 1]:
+            obv[i] = obv[i - 1] + volumes[i]
+        elif closes[i] < closes[i - 1]:
+            obv[i] = obv[i - 1] - volumes[i]
+        else:
+            obv[i] = obv[i - 1]
+    result["obv"] = [int(x) for x in obv]
+
+    # Stochastic
+    k_period = 14
+    stoch_k = np.full(len(closes), np.nan)
+    for i in range(k_period - 1, len(closes)):
+        low_k = np.min(lows[i - k_period + 1 : i + 1])
+        high_k = np.max(highs[i - k_period + 1 : i + 1])
+        if high_k != low_k:
+            stoch_k[i] = (closes[i] - low_k) / (high_k - low_k) * 100
+    stoch_d = _sma(stoch_k, 3)
+    result["stochastic"] = {"k": _round(stoch_k), "d": _round(stoch_d)}
+
+    latest_close = float(closes[-1])
+    result["latest_price"] = round(latest_close, 4)
+    result["signals"] = _generate_signals(result, closes, volumes, latest_close, rsi, macd_histogram, stoch_k, upper, lower, sma_short, sma_long)
+
+    return result
