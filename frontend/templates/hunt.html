@@ -164,6 +164,14 @@ function renderHuntResults(data){
         const scoreColor=r.total_score>=70?'up':r.total_score>=50?'warn':'down';
         const upside=r.target_mean&&r.price?(r.target_mean-r.price)/r.price*100:null;
 
+        // Extract key metrics for vertical display
+        const pe=r.pe?r.pe.toFixed(1):'—';
+        const mktCap=r.market_cap?fmtNum(r.market_cap):'—';
+        const upsideStr=upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—';
+        const rec=r.recommendation||'—';
+        const buyN=(sc.technical?.details||[]).filter(d=>d.includes('买入')).length||0;
+        const sellN=(sc.technical?.details||[]).filter(d=>d.includes('卖出')).length||0;
+
         return`<div class="card px-4 py-2 hover:border-acc/30 cursor-pointer" onclick="location.href='/stock/${r.symbol}'">
             <div class="flex items-center gap-3">
                 <span class="text-sm w-6 shrink-0">${rankBadge||(i+1)}</span>
@@ -172,6 +180,12 @@ function renderHuntResults(data){
                     <span class="text-mute text-[10px] truncate block">${r.name||''}</span>
                 </div>
                 <span class="text-base font-bold w-20 shrink-0">$ ${r.price?.toFixed(2)||'—'}</span>
+                <div class="flex gap-3 shrink-0 text-center text-[10px]">
+                    <div><span class="text-mute block">PE</span><span>${pe}</span></div>
+                    <div><span class="text-mute block">市值</span><span>${mktCap}</span></div>
+                    <div><span class="text-mute block">目标</span><span class="${upside>0?'up':upside<0?'down':''}">${upsideStr}</span></div>
+                    <div><span class="text-mute block">信号</span><span class="${buyN>sellN?'up':sellN>buyN?'down':''}">${buyN}B/${sellN}S</span></div>
+                </div>
                 <div class="flex-1 space-y-0.5">
                     ${bar('bg-up',sc.value?.score||0,30,'价值')}
                     ${bar('bg-up',sc.analyst?.score||0,25,'机构')}
@@ -183,12 +197,6 @@ function renderHuntResults(data){
                     <span class="text-[10px] text-mute block">/100</span>
                 </div>
                 <span class="tag ${tagCls(r.total_score>=60?'buy':r.total_score>=40?'sell':'neutral')} shrink-0 w-14 text-center">${r.total_score>=60?'推荐':r.total_score>=40?'关注':'一般'}</span>
-            </div>
-            <div class="mt-1.5 ml-9 grid grid-cols-4 gap-x-4 text-[10px] text-mute">
-                <div>${detailTags(sc.value?.details)}</div>
-                <div>${detailTags(sc.analyst?.details)}</div>
-                <div>${detailTags(sc.technical?.details)}</div>
-                <div>${detailTags(sc.financial?.details)}</div>
             </div>
         </div>`;
     }).join('');
