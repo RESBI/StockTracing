@@ -51,7 +51,7 @@ async function loadPortfolio(){
         document.getElementById('s-total').textContent='$'+data.total_value.toFixed(2);
         const totalPnl=data.holdings.reduce((s,h)=>s+h.pnl,0);
         const pnlEl=document.getElementById('s-pnl');
-        pnlEl.textContent='$'+totalPnl.toFixed(2);
+        pnlEl.innerHTML='$'+totalPnl.toFixed(2)+'<span class="text-sm ml-1">('+(totalPnl/data.total_cost*100).toFixed(2)+'%)</span>';
         pnlEl.className='text-2xl font-bold '+(totalPnl>=0?'up':'down');
         document.getElementById('s-syms').textContent=data.symbol_pie.length;
         renderPies(data);
