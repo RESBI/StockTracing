@@ -179,10 +179,10 @@ function renderHuntResults(data){
         const divY=r.dividend_yield?(r.dividend_yield*100).toFixed(1)+'%':'—';
         const beta=r.beta?r.beta.toFixed(2):'—';
         // Score banner
-        let bannerText='',bannerCls='';
-        if(r.total_score>=60){bannerText='综合评价：偏多 📈';bannerCls='bg-up';}
-        else if(r.total_score>=40){bannerText='综合评价：中性 📊';bannerCls='bg-warn';}
-        else{bannerText='综合评价：偏空 📉';bannerCls='bg-down';}
+        let bannerCls='';
+        if(r.total_score>=60){bannerCls='bg-up';}
+        else if(r.total_score>=40){bannerCls='bg-warn';}
+        else{bannerCls='bg-down';}
 
         return`<div class="card px-4 py-2 hover:border-acc/30 cursor-pointer" onclick="location.href='/stock/${r.symbol}'">
             <div class="flex items-center gap-3">
@@ -192,6 +192,7 @@ function renderHuntResults(data){
                     <span class="text-mute text-[10px] truncate block">${r.name||''}</span>
                 </div>
                 <span class="text-base font-bold w-20 shrink-0">$ ${r.price?.toFixed(2)||'—'}</span>
+                <div class="shrink-0 space-y-0.5">
                 <div class="flex gap-3 shrink-0 text-center text-[10px]">
                     <div><span class="text-mute block">PE</span><span>${pe}</span></div>
                     <div><span class="text-mute block">目标价</span><span>${targetPrice}</span></div>
@@ -203,6 +204,7 @@ function renderHuntResults(data){
                     <div><span class="text-mute block">股息</span><span>${divY}</span></div>
                     <div><span class="text-mute block">Beta</span><span>${beta}</span></div>
                     <div><span class="text-mute block">分析师</span><span>${anCount}</span></div>
+                </div>
                 </div>
                 <div class="flex-1 space-y-0.5">
                     ${bar('bg-up',sc.value?.score||0,30,'价值')}
@@ -216,7 +218,6 @@ function renderHuntResults(data){
                 </div>
                 <span class="tag ${bannerCls} shrink-0 w-14 text-center">${r.total_score>=60?'推荐':r.total_score>=40?'关注':'一般'}</span>
             </div>
-            <div class="mt-1 ml-9 text-[10px]"><span class="${bannerCls} px-2 py-0.5 rounded">${bannerText}</span></div>
         </div>`;
     }).join('');
 }
