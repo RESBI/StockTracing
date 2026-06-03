@@ -220,6 +220,7 @@ def get_portfolio() -> dict[str, Any]:
 
 
 def _compute_pnl_curve(db) -> list[dict]:
+    from backend.database.models import StockCache
     from datetime import datetime, timedelta
     from collections import defaultdict
     trades = _load()
