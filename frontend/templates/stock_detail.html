@@ -37,10 +37,10 @@
         <div id="panel-chart" class="tab-panel hidden">
             <div class="card p-4 mb-6">
                 <div class="flex gap-2 mb-4">
-                    <button class="btn btn-outline btn-xs" onclick="loadChart('1mo')">1月</button>
-                    <button class="btn btn-outline btn-xs" onclick="loadChart('3mo')">3月</button>
+                    <button class="btn btn-outline btn-xs" id="btn-1mo" onclick="loadChart('1mo')">1月</button>
+                    <button class="btn btn-outline btn-xs" id="btn-3mo" onclick="loadChart('3mo')">3月</button>
                     <button class="btn btn-acc btn-xs" id="btn-6mo" onclick="loadChart('6mo')">6月</button>
-                    <button class="btn btn-outline btn-xs" onclick="loadChart('1y')">1年</button>
+                    <button class="btn btn-outline btn-xs" id="btn-1y" onclick="loadChart('1y')">1年</button>
                 </div>
                 <div style="position:relative;height:380px;">
                     <canvas id="price-chart"></canvas>
