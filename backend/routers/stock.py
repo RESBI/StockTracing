@@ -20,7 +20,19 @@ from backend.services.crypto import get_crypto_info, get_crypto_history, get_cry
 
 def _is_crypto(symbol: str) -> bool:
     s = symbol.upper().strip()
+    if s.startswith("CRYPTO:"):
+        return True
+    if "-USDT" in s or "-USD" in s:
+        return True
     return any(s == c.split("-")[0] or s == c for c in CRYPTO_SYMBOLS)
+
+
+def _crypto_sym(symbol: str) -> str:
+    """Strip CRYPTO: prefix for crypto symbols."""
+    s = symbol.upper().strip()
+    if s.startswith("CRYPTO:"):
+        return s[7:]
+    return s
 from backend.utils.watchlist import load_watchlist, add_to_watchlist, remove_from_watchlist
 from backend.database.models import LLMCache, SessionLocal, HuntSession
 from backend.config import _load_json_config, save_json_config, CONFIG_FILE
@@ -38,7 +50,7 @@ def _resolve_sym(symbol: str) -> str:
 def api_stock_info(symbol: str, refresh: bool = False):
     try:
         if _is_crypto(symbol):
-            info = get_crypto_info(symbol)
+            info = get_crypto_info(_crypto_sym(symbol))
             if info:
                 return info
             raise HTTPException(status_code=404)
@@ -51,7 +63,7 @@ def api_stock_info(symbol: str, refresh: bool = False):
 def api_tick(symbol: str):
     try:
         if _is_crypto(symbol):
-            t = get_crypto_tick(symbol)
+            t = get_crypto_tick(_crypto_sym(symbol))
             if t: return t
             raise HTTPException(status_code=404)
         return get_tick(symbol)
@@ -63,7 +75,7 @@ def api_tick(symbol: str):
 def api_stock_history(symbol: str, period: str = "6mo", interval: str = "1d"):
     try:
         if _is_crypto(symbol):
-            return get_crypto_history(symbol, period=period)
+            return get_crypto_history(_crypto_sym(symbol), period=period)
         return get_stock_history(symbol, period=period, interval=interval)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -141,13 +153,14 @@ def api_summary(symbol: str):
 @router.get("/stock/{symbol}/full")
 def api_full_analysis(symbol: str, refresh: bool = False):
     if _is_crypto(symbol):
+        csym = _crypto_sym(symbol)
         result = {}
         try:
-            result["info"] = get_crypto_info(symbol) or {}
+            result["info"] = get_crypto_info(csym) or {}
         except Exception:
             result["info"] = {}
         try:
-            result["history"] = get_crypto_history(symbol, period="6mo")
+            result["history"] = get_crypto_history(csym, period="6mo")
         except Exception:
             result["history"] = []
         result["analyst"] = {}
@@ -226,7 +239,10 @@ def api_get_watchlist():
 
 @router.post("/watchlist/{symbol}")
 def api_add_watchlist(symbol: str):
-    return {"symbols": add_to_watchlist(_resolve_sym(symbol))}
+    sym = _resolve_sym(symbol)
+    if _is_crypto(sym) and not sym.startswith("CRYPTO:"):
+        sym = "CRYPTO:" + sym.replace("-USDT","").replace("-USD","")
+    return {"symbols": add_to_watchlist(sym)}
 
 
 @router.delete("/watchlist/{symbol}")

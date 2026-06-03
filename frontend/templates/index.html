@@ -174,6 +174,7 @@ function makeBar(sym, data){
     const curPrice=info.current_price;
     const prevPrice=priceMap[sym]?.price;
     const _crypto=isCrypto(info);
+    const displaySym=_crypto&&sym.includes('CRYPTO:')?sym.replace('CRYPTO:',''):sym;
     // Today change
     const todayChg=info.previous_close&&curPrice?((curPrice-info.previous_close)/info.previous_close*100):null;
     const todayStr=todayChg!=null?(todayChg>=0?'+':'')+todayChg.toFixed(2)+'%':'—';
@@ -187,7 +188,7 @@ function makeBar(sym, data){
     return `<div class="card px-4 py-1.5 hover:border-acc/30 cursor-pointer transition-colors" style="min-height:44px" onclick="location.href='/stock/${sym}'">
         <div class="flex items-center gap-3 h-full">
             <div class="w-28 shrink-0 leading-tight">
-                <span class="font-bold text-sm block">${sym}</span>
+                <span class="font-bold text-sm block">${displaySym}</span>
                 <span class="text-mute text-[11px] truncate block">${info.name||'—'}</span>
             </div>
             ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
@@ -221,9 +222,12 @@ async function loadDashboard(){
         priceMap={};
         return;
     }
-    tags.innerHTML=syms.map(s=>`<span class="inline-flex items-center gap-1 bg-bg border border-bord rounded px-2.5 py-1 text-xs">
-        <a href="/stock/${s}" class="hover:text-acc">${s}</a>
-        <button onclick="removeOne('${s}')" class="text-mute hover:text-down ml-0.5">&times;</button></span>`).join('');
+    tags.innerHTML=syms.map(s=>{
+        const ds=s.startsWith('CRYPTO:')?s.slice(7):s;
+        return`<span class="inline-flex items-center gap-1 bg-bg border border-bord rounded px-2.5 py-1 text-xs">
+        <a href="/stock/${s}" class="hover:text-acc">${ds}</a>
+        <button onclick="removeOne('${s}')" class="text-mute hover:text-down ml-0.5">&times;</button></span>`;
+    }).join('');
 
     grid.innerHTML='<div class="text-center py-6"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">加载中...</p></div>';
 
