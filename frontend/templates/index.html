@@ -60,15 +60,18 @@
         <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-mute font-medium border-b border-bord mb-1" style="min-height:32px">
             <span class="w-28 shrink-0">代码 / 名称</span>
             <span class="w-24 shrink-0">价格</span>
+            <span style="width:50px" class="shrink-0"></span>
             <span class="w-20 shrink-0 text-center">5m 涨跌</span>
             <span class="w-20 shrink-0 text-center">D 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">W 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">M 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">Y 涨跌/信号</span>
             <span class="shrink-0 w-14 text-center">综合</span>
-            <span class="flex-1"></span>
+            <span class="w-14 shrink-0 text-center">PE</span>
+            <span class="w-14 shrink-0 text-center">目标</span>
+            <span class="w-14 shrink-0 text-center">空间</span>
         </div>
-        <div id="dashboard" class="space-y-1.5 min-w-[740px]"></div>
+        <div id="dashboard" class="space-y-1.5 min-w-[880px]"></div>
     </div>
 </div></div>
 {% endblock %}
@@ -191,11 +194,9 @@ function makeBar(sym, data){
             <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.M)} ${sigSpan(pdSig.M)}</div>
             <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.Y)} ${sigSpan(pdSig.Y)}</div>
             <span class="tag ${comp?tagCls(comp.signal):'tag-mute'} shrink-0 w-14 text-center">${comp?signalLabel(comp.signal):'—'}</span>
-            <div class="flex-1 flex items-center gap-4 text-xs">
-                <span><span class="text-mute">PE </span>${info.pe_ratio?.toFixed(1)||'—'}</span>
-                <span><span class="text-mute">目标 </span>${info.target_mean_price?info.target_mean_price.toFixed(0):'—'}</span>
-                <span><span class="text-mute">空间 </span><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
-            </div>
+            <span class="w-14 shrink-0 text-xs text-center"><span class="text-mute">${info.pe_ratio?.toFixed(1)||'—'}</span></span>
+            <span class="w-14 shrink-0 text-xs text-center"><span>${info.target_mean_price?info.target_mean_price.toFixed(0):'—'}</span></span>
+            <span class="w-14 shrink-0 text-xs text-center"><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
         </div>
     </div>`;
 }
