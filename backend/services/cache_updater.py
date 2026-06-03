@@ -71,17 +71,21 @@ class CacheUpdater:
         regular_price = info.get("regularMarketPrice")
         pre_change_pct = info.get("preMarketChangePercent")
         post_change_pct = info.get("postMarketChangePercent")
+        market_state = info.get("marketState", "")
 
-        # Update tick cache with extended hours data
+        # Update tick cache, preserving extended hours data when new value is None
+        # Clear pre/post when market is in REGULAR session
+        existing = self._ticks.get(sym, {})
+        in_regular = market_state == "REGULAR"
         self._ticks[sym] = {
-            "price": price,
+            "price": price if price is not None else existing.get("price"),
             "ts": time.time(),
-            "pre_market_price": pre_price,
-            "pre_market_change": pre_change_pct,
-            "post_market_price": post_price,
-            "post_market_change": post_change_pct,
-            "regular_market_price": regular_price,
-            "previous_close": info.get("previousClose") or info.get("regularMarketPreviousClose"),
+            "pre_market_price": None if in_regular else (pre_price if pre_price is not None else existing.get("pre_market_price")),
+            "pre_market_change": None if in_regular else (pre_change_pct if pre_change_pct is not None else existing.get("pre_market_change")),
+            "post_market_price": None if in_regular else (post_price if post_price is not None else existing.get("post_market_price")),
+            "post_market_change": None if in_regular else (post_change_pct if post_change_pct is not None else existing.get("post_market_change")),
+            "regular_market_price": regular_price if regular_price is not None else existing.get("regular_market_price"),
+            "previous_close": (info.get("previousClose") or info.get("regularMarketPreviousClose")) or existing.get("previous_close"),
         }
 
         data = {
