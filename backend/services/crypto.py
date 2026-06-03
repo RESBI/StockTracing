@@ -191,11 +191,31 @@ def get_crypto_tick(symbol: str) -> dict | None:
     info = get_crypto_info(symbol)
     if not info:
         return None
+
+    sparkline = _fetch_sparkline(symbol)
     return {
         "symbol": info["symbol"],
         "price": info["current_price"],
         "change_5m": None,
+        "sparkline": sparkline,
     }
+
+
+def _fetch_sparkline(symbol: str) -> list[float]:
+    """Get today's intraday prices for sparkline."""
+    sym = symbol.upper().strip()
+    if "-" not in sym:
+        sym = sym + "-USDT"
+    try:
+        import requests
+        url = f"https://api.binance.com/api/v3/klines?symbol={sym.replace('-','')}&interval=5m&limit=80"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            return [float(c[4]) for c in data]  # Close prices
+    except Exception:
+        pass
+    return []
 
 
 def discover_crypto() -> list[str]:
