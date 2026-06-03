@@ -233,16 +233,50 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
         sym = t.get("symbol", "").upper()
         if sym in symbol_histories:
             continue
-        for period in ["1y", "6mo", "3mo", "1mo"]:
-            key = f"history_{period}_1d"
-            hist = db.query(AnalysisCache).filter(
-                AnalysisCache.symbol == sym,
-                AnalysisCache.analysis_type == key,
-            ).first()
-            if hist and hist.data:
-                records = hist.data.get("records", [])
-                symbol_histories[sym] = {r["date"]: r["close"] for r in records if r.get("close")}
-                break
+        if interval == "1h":
+            # Fetch real hourly data
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(sym)
+                df = ticker.history(period="5d", interval="60m")
+                if not df.empty:
+                    hourly = {}
+                    for idx, row in df.iterrows():
+                        close_val = float(row["Close"])
+                        if close_val and close_val > 0:
+                            key = str(idx)[:16]  # "2026-06-03 09:30"
+                            hourly[key] = close_val
+                    if hourly:
+                        symbol_histories[sym] = hourly
+                        # Save to cache
+                        from datetime import timezone as tz
+                        now = datetime.now(tz.utc)
+                        records = [{"date": k, "close": v} for k, v in hourly.items()]
+                        existing_cache = db.query(AnalysisCache).filter(
+                            AnalysisCache.symbol == sym,
+                            AnalysisCache.analysis_type == "history_5d_60m",
+                        ).first()
+                        if existing_cache:
+                            existing_cache.data = {"records": records}
+                            existing_cache.updated_at = now
+                        else:
+                            db.add(AnalysisCache(symbol=sym, analysis_type="history_5d_60m",
+                                                 data={"records": records}, updated_at=now))
+                        db.commit()
+            except Exception:
+                pass
+
+        if sym not in symbol_histories:
+            for period in ["1y", "6mo", "3mo", "1mo"]:
+                key = f"history_{period}_1d"
+                hist = db.query(AnalysisCache).filter(
+                    AnalysisCache.symbol == sym,
+                    AnalysisCache.analysis_type == key,
+                ).first()
+                if hist and hist.data:
+                    records = hist.data.get("records", [])
+                    symbol_histories[sym] = {r["date"]: r["close"] for r in records if r.get("close")}
+                    break
 
     # Find date range
     all_dates = []
@@ -264,40 +298,36 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
 
     # For hourly, interpolate from daily data
     if interval == "1h":
-        # Build interpolated hourly prices from daily data
-        for sym, daily_map in list(symbol_histories.items()):
-            dates = sorted([k for k in daily_map.keys() if len(k) == 10])
-            if len(dates) < 2:
-                continue
-            hourly_map = {}
-            for i in range(len(dates) - 1):
-                d1 = datetime.strptime(dates[i], "%Y-%m-%d")
-                d2 = datetime.strptime(dates[i + 1], "%Y-%m-%d")
-                p1 = daily_map[dates[i]]
-                p2 = daily_map[dates[i + 1]]
-                total_hours = int((d2 - d1).total_seconds() / 3600)
-                if total_hours <= 0:
-                    continue
-                for h in range(total_hours + 1):
-                    t = d1 + timedelta(hours=h)
-                    frac = h / total_hours if total_hours > 0 else 0
-                    price = p1 + (p2 - p1) * frac
-                    hourly_map[t.strftime("%Y-%m-%d %H:%M")] = round(price, 4)
-            symbol_histories[sym] = hourly_map
-        start = start.replace(hour=0, minute=0)
-        step = timedelta(hours=1)
+        # Use actual hourly timestamps from the data
+        all_timestamps = set()
+        for sym, pmap in symbol_histories.items():
+            for k in pmap:
+                if len(k) > 10:  # hourly key format
+                    all_timestamps.add(k)
+        if all_timestamps:
+            all_timestamps = sorted(all_timestamps)
+            start_dt = datetime.strptime(all_timestamps[0], "%Y-%m-%d %H:%M")
+            end_dt = datetime.strptime(all_timestamps[-1], "%Y-%m-%d %H:%M")
+            step = timedelta(hours=1)
+        else:
+            # No hourly data, fall back to daily
+            interval = "1d"
     else:
         step = timedelta(days=1)
 
-    # Compute portfolio value at each time step
+    # Build iteration list
+    if interval == "1h" and len(all_timestamps) > 0:
+        time_keys = all_timestamps
+    else:
+        time_keys = []
+        current = start
+        while current <= end:
+            time_keys.append(current.strftime("%Y-%m-%d"))
+            current += timedelta(days=1)
+
     curve = []
-    current = start
-    last_prices = {}  # symbol -> last known price
-    while current <= end:
-        if interval == "1h":
-            key = current.strftime("%Y-%m-%d %H:%M")
-        else:
-            key = current.strftime("%Y-%m-%d")
+    last_prices = {}
+    for key in time_keys:
         day_total = 0.0
         for t in trades:
             open_p = t.get("open_price")
@@ -313,31 +343,31 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
             cd = cd_raw[:10] if cd_raw else None
             sym = t.get("symbol", "").upper()
 
-            # Check active
-            od_dt = datetime.strptime(od, "%Y-%m-%d")
-            cd_dt = datetime.strptime(cd, "%Y-%m-%d") if cd else None
-            if current < od_dt:
+            # Check active (compare dates only)
+            if key[:10] < od:
                 continue
-            if cd_dt and current >= cd_dt:
+            if cd and key[:10] > cd:
                 continue
 
             # Get price
             price_map = symbol_histories.get(sym, {})
             price = price_map.get(key)
 
-            if price is None and interval == "1h":
-                for offset in range(1, 4):
-                    prev = (current - timedelta(hours=offset)).strftime("%Y-%m-%d %H:%M")
-                    if prev in price_map:
-                        price = price_map[prev]
-                        break
             if price is None:
-                day_key = current.strftime("%Y-%m-%d")
-                price = price_map.get(day_key)
-
-            if price is None:
-                # Use last known price for this symbol, or open price
-                price = last_prices.get(sym, open_p)
+                # Try nearby keys (for hourly)
+                if interval == "1h" and len(key) > 10:
+                    # Try same date keys
+                    base_date = key[:10]
+                    for h in range(24):
+                        alt = f"{base_date} {str(h).zfill(2)}:30"
+                        if alt in price_map:
+                            price = price_map[alt]
+                            break
+                if price is None:
+                    # Try daily key
+                    price = price_map.get(key[:10])
+                if price is None:
+                    price = last_prices.get(sym, open_p)
             else:
                 last_prices[sym] = price
 
@@ -348,6 +378,5 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
             day_total += pnl
 
         curve.append({"date": key, "pnl": round(day_total, 2)})
-        current += step
 
     return curve
