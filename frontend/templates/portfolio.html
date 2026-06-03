@@ -82,8 +82,16 @@ function renderPies(data){
         return new Chart(ctx,{type:'doughnut',data:{labels:sorted.map(d=>d.name),datasets:[{data:sorted.map(d=>d.value),backgroundColor:colors}]},
             options:{responsive:true,maintainAspectRatio:false,
                 plugins:{
-                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:8,
-                        sort:(a,b)=>sorted.findIndex(x=>x.name===b.text)-sorted.findIndex(x=>x.name===a.text)}},
+                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:12,boxWidth:8,usePointStyle:true,pointStyleWidth:8,
+                        generateLabels:function(chart){
+                            const data=chart.data;
+                            return data.labels.map((label,i)=>({
+                                text:label+'  '+(data.datasets[0].data[i]/total*100).toFixed(1)+'%',
+                                fillStyle:data.datasets[0].backgroundColor[i],
+                                strokeStyle:data.datasets[0].backgroundColor[i],
+                                lineWidth:0,hidden:false,index:i,pointStyle:'rect',rotation:0
+                            }));
+                        }}},
                     tooltip:{callbacks:{label:ctx=>ctx.label+': '+(ctx.raw/total*100).toFixed(1)+'% ($'+ctx.raw.toFixed(2)+')'}}
                 }}});
     }
