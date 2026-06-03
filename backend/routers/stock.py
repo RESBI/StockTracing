@@ -295,13 +295,15 @@ def api_hunt_run(market: str, sector: str):
     # Save to history
     db = SessionLocal()
     try:
-        db.add(HuntSession(
+        session = HuntSession(
             market=market,
             sector=sector,
             data=result,
             total=result["total"],
-        ))
+        )
+        db.add(session)
         db.commit()
+        result["created_at"] = session.created_at.isoformat() if session.created_at else ""
     finally:
         db.close()
     return result

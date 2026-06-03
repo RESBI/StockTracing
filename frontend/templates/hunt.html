@@ -3,7 +3,7 @@
 {% block content %}
 <div class="p-6">
     <h1 class="text-xl font-bold mb-1">狩猎</h1>
-    <p class="text-sm text-mute mb-6">扫描大盘领域，发掘低估标的与机构高评级机会</p>
+    <p class="text-sm text-mute mb-6">扫描大盘领域，发掘低估标的与机构高评级机会 <span id="last-hunt-time" class="text-mute ml-3 text-xs"></span></p>
 
     <!-- Controls -->
     <div class="card p-4 mb-6">
@@ -91,6 +91,7 @@ async function autoLoadSession(){
         const match=rows.find(r=>r.market===m&&r.sector===s);
         if(match){
             const data=await api('/hunt/history/'+match.id);
+            data.created_at=match.created_at;
             document.getElementById('hunt-status').classList.add('hidden');
             renderHuntResults(data);
             document.getElementById('hunt-results').classList.remove('hidden');
@@ -102,8 +103,9 @@ async function autoLoadSession(){
             const data=await api('/hunt/history/'+marketLatest.id);
             const filtered=data.results.filter(r=>r.sector===s);
             if(filtered.length){
+                data.created_at=marketLatest.created_at;
                 document.getElementById('hunt-status').classList.add('hidden');
-                renderHuntResults({...data,results:filtered,total:filtered.length,sector:s});
+                renderHuntResults({...data,results:filtered,total:filtered.length,sector:s,created_at:marketLatest.created_at});
                 document.getElementById('hunt-results').classList.remove('hidden');
                 return;
             }
@@ -136,6 +138,9 @@ async function runHunt(){
 function renderHuntResults(data){
     const cont=document.getElementById('hunt-results');
     const rs=data.results||[];
+    // Show hunt time
+    const ts=data.created_at||'';
+    document.getElementById('last-hunt-time').textContent=ts?'最后狩猎: '+ts.replace('T',' ').substring(0,16):'';
     if(!rs.length){cont.innerHTML='<div class="card p-4 text-center text-mute text-sm">未找到标的</div>';return;}
 
     cont.innerHTML='<div class="text-xs text-mute mb-2 px-1">'+data.market+' · '+data.sector+' · 共'+data.total+'只 · 按推荐强度排序</div>';
