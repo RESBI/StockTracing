@@ -158,10 +158,6 @@ function makeBar(sym, data){
     const pdSig=periods.signals||{};
     const comp=tech.signals?tech.signals.find(x=>x.indicator==='综合评分'):null;
     const upside=analyst.upside_percent;
-    // Today change from info
-    const todayChg=info.previous_close&&curPrice?((curPrice-info.previous_close)/info.previous_close*100):null;
-    const todayStr=todayChg!=null?(todayChg>=0?'+':'')+todayChg.toFixed(2)+'%':'—';
-    const todayCls=todayChg!=null?(todayChg>=0?'up':'down'):'';
 
     function chgSpan(val){
         if(val==null||val===undefined)return'<span class="text-mute">—</span>';
@@ -177,6 +173,10 @@ function makeBar(sym, data){
     const curPrice=info.current_price;
     const prevPrice=priceMap[sym]?.price;
     const _crypto=isCrypto(info);
+    // Today change
+    const todayChg=info.previous_close&&curPrice?((curPrice-info.previous_close)/info.previous_close*100):null;
+    const todayStr=todayChg!=null?(todayChg>=0?'+':'')+todayChg.toFixed(2)+'%':'—';
+    const todayCls=todayChg!=null?(todayChg>=0?'up':'down'):'';
     let flashClass='';
     if(prevPrice!=null&&curPrice!=null&&prevPrice!==curPrice){
         flashClass=curPrice>prevPrice?'price-flash-up':'price-flash-down';
