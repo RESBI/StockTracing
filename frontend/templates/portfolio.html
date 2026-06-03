@@ -5,27 +5,28 @@
     <h1 class="text-xl font-bold mb-1">持仓分析</h1>
     <p class="text-sm text-mute mb-6">当前持仓、盈亏分布与收益曲线</p>
 
-    <!-- Summary row 1 -->
-    <div class="grid grid-cols-2 gap-3 mb-3">
-        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓成本</p><p class="text-2xl font-bold" id="s-cost">—</p></div>
-        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓总值</p><p class="text-2xl font-bold" id="s-total">—</p></div>
-    </div>
-    <!-- Summary row 2 -->
-    <div class="grid grid-cols-2 gap-3 mb-6">
-        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">总浮盈</p><p class="text-2xl font-bold" id="s-pnl">—</p></div>
-        <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">标的总数</p><p class="text-2xl font-bold" id="s-syms">—</p></div>
-    </div>
-
-    <!-- Pie charts -->
+    <!-- Top row: Summary + Symbol pie -->
     <div class="grid grid-cols-2 gap-4 mb-6">
+        <!-- Left: stacked summary -->
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓成本</p><p class="text-2xl font-bold" id="s-cost">—</p></div>
+                <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓总值</p><p class="text-2xl font-bold" id="s-total">—</p></div>
+            </div>
+            <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">总浮盈</p><p class="text-2xl font-bold" id="s-pnl">—</p></div>
+            <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">标的总数</p><p class="text-2xl font-bold" id="s-syms">—</p></div>
+        </div>
+        <!-- Right: Symbol pie -->
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">标的占比</h3>
-            <div style="position:relative;height:220px"><canvas id="symbol-pie"></canvas></div>
+            <div style="position:relative;height:260px"><canvas id="symbol-pie"></canvas></div>
         </div>
-        <div class="card p-4">
-            <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
-            <div style="position:relative;height:220px"><canvas id="sector-pie"></canvas></div>
-        </div>
+    </div>
+
+    <!-- Sector pie -->
+    <div class="card p-4 mb-6">
+        <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
+        <div style="position:relative;height:220px"><canvas id="sector-pie"></canvas></div>
     </div>
 
     <!-- P&L Curve -->
@@ -46,10 +47,9 @@
         <div class="flex items-center gap-4 px-2 mb-1 text-xs text-mute font-medium">
             <span class="w-28 shrink-0">代码 / 名称</span>
             <span class="w-14 shrink-0 text-center">股数</span>
-            <span class="w-20 shrink-0 text-center">成本价</span>
-            <span class="w-20 shrink-0 text-center">现价</span>
+            <span class="w-24 shrink-0 text-center">成本价</span>
+            <span class="w-24 shrink-0 text-center">现价</span>
             <span class="w-16 shrink-0 text-center">涨跌</span>
-            <span class="w-12 shrink-0 text-center">走势</span>
         </div>
         <div id="holdings-detail" class="space-y-1.5"></div>
     </div>
@@ -71,7 +71,6 @@ async function loadPortfolio(){
         document.getElementById('s-syms').textContent=data.symbol_pie.length;
         renderPies(data);
         renderHoldings(data.holdings);
-        loadSparklines(data.holdings);
         renderPnlCurve(data.pnl_curve);
     }catch(e){}
 }
@@ -79,15 +78,12 @@ async function loadPortfolio(){
 async function loadPnlCurve(interval){
     document.getElementById('btn-1d').className='btn '+(interval==='1d'?'btn-acc':'btn-outline')+' btn-xs';
     document.getElementById('btn-1h').className='btn '+(interval==='1h'?'btn-acc':'btn-outline')+' btn-xs';
-    try{
-        const data=await api('/trades/portfolio?interval='+interval);
-        renderPnlCurve(data.pnl_curve);
-    }catch(e){}
+    try{const data=await api('/trades/portfolio?interval='+interval);renderPnlCurve(data.pnl_curve);}catch(e){}
 }
 
 function renderPies(data){
     const colors=['#296BEF','#00B887','#F59E0B','#F54D4D','#805ad5','#3182ce','#38a169','#dd6b20','#e53e3e','#8b5cf6'];
-    function makePie(ctx, chartVar, items){
+    function makePie(ctx,chartVar,items){
         if(chartVar)chartVar.destroy();
         const sorted=[...items].sort((a,b)=>b.value-a.value);
         const total=sorted.reduce((s,i)=>s+i.value,0);
@@ -96,93 +92,41 @@ function renderPies(data){
         const pcts=sorted.map(d=>(d.value/total*100).toFixed(1)+'%');
         return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:colors}]},
             options:{responsive:true,maintainAspectRatio:false,
-                plugins:{
-                    legend:{position:'right',labels:{color:'#848E9C',font:{size:12},padding:14,boxWidth:10,usePointStyle:true,
-                        generateLabels:function(chart){
-                            const ds=chart.data.datasets[0];
-                            return chart.data.labels.map((l,i)=>({
-                                text:'  '+pcts[i]+'  '+l,
-                                fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],
-                                lineWidth:0,hidden:false,index:i,
-                                fontColor:'#848E9C',pointStyle:'circle',pointStyleWidth:8
-                            }));
-                        }}},
-                    tooltip:{callbacks:{label:ctx=>ctx.label+': '+pcts[ctx.dataIndex]+' ($'+values[ctx.dataIndex].toFixed(2)+')'}}
-                }}});
+                plugins:{legend:{position:'right',labels:{color:'#848E9C',font:{size:12},padding:14,boxWidth:10,usePointStyle:true,
+                    generateLabels:function(chart){var ds=chart.data.datasets[0];return chart.data.labels.map(function(l,i){return{text:'  '+pcts[i]+'  '+l,fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],lineWidth:0,hidden:false,index:i,fontColor:'#848E9C',pointStyle:'circle',pointStyleWidth:8}});}}},
+                tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+pcts[ctx.dataIndex]+' ($'+values[ctx.dataIndex].toFixed(2)+')';}}}}}});
     }
     symbolChart=makePie(document.getElementById('symbol-pie').getContext('2d'),symbolChart,data.symbol_pie);
     sectorChart=makePie(document.getElementById('sector-pie').getContext('2d'),sectorChart,data.sector_pie);
 }
 
 function renderHoldings(holdings){
-    const c=document.getElementById('holdings-detail');
+    var c=document.getElementById('holdings-detail');
     if(!holdings.length){c.innerHTML='<p class="text-mute text-sm text-center py-4">暂无持仓</p>';return;}
-    c.innerHTML=holdings.map(h=>{
-        const cost=h.open_price*h.quantity;
-        const val=h.current_price*h.quantity;
-        const chgPct=((h.current_price-h.open_price)/h.open_price*100);
-        return '<div class="card px-4 py-2 bg-[#151b28]">'+
-            '<div class="flex items-center gap-4">'+
-                '<div class="w-28 shrink-0 leading-tight">'+
-                    '<span class="font-bold text-sm block">'+h.symbol+'</span>'+
-                    '<span class="text-mute text-[10px] block">'+(h.direction==='long'?'做多':'做空')+'</span>'+
-                '</div>'+
-                '<span class="w-14 shrink-0 text-center text-xs font-medium">'+h.quantity+'</span>'+
-                '<div class="w-20 shrink-0 text-center leading-tight">'+
-                    '<div class="font-medium text-sm">$'+h.open_price.toFixed(2)+'</div>'+
-                    '<div class="text-[11px] text-mute">$'+cost.toFixed(0)+'</div>'+
-                '</div>'+
-                '<div class="w-20 shrink-0 text-center leading-tight">'+
-                    '<div class="'+(h.pnl>=0?'up':'down')+' font-medium text-sm">$'+h.current_price.toFixed(2)+'</div>'+
-                    '<div class="'+(val>=cost?'up':'down')+' text-[11px]">$'+val.toFixed(0)+'</div>'+
-                '</div>'+
-                '<div class="w-16 shrink-0 text-center text-xs">'+
-                    '<span class="'+(chgPct>=0?'up':'down')+'">'+(chgPct>=0?'+':'')+chgPct.toFixed(2)+'%</span>'+
-                '</div>'+
-                '<svg class="sparkline shrink-0" data-symbol="'+h.symbol+'" width="44" height="18" style="overflow:visible"></svg>'+
-            '</div>'+
-        '</div>';
+    c.innerHTML=holdings.map(function(h){
+        var cost=h.open_price*h.quantity;
+        var val=h.current_price*h.quantity;
+        var chgPct=((h.current_price-h.open_price)/h.open_price*100);
+        return '<div class="card px-4 py-2 bg-[#151b28]"><div class="flex items-center gap-4">'+
+            '<div class="w-28 shrink-0 leading-tight"><span class="font-bold text-sm block">'+h.symbol+'</span><span class="text-mute text-[10px] block">'+(h.direction==='long'?'做多':'做空')+'</span></div>'+
+            '<span class="w-14 shrink-0 text-center text-base font-bold">'+h.quantity+'</span>'+
+            '<div class="w-24 shrink-0 text-center leading-tight"><div class="font-medium text-sm">$'+h.open_price.toFixed(2)+'</div><div class="text-[11px] text-mute">$'+cost.toFixed(2)+'</div></div>'+
+            '<div class="w-24 shrink-0 text-center leading-tight"><div class="'+(h.pnl>=0?'up':'down')+' font-medium text-sm">$'+h.current_price.toFixed(2)+'</div><div class="'+(val>=cost?'up':'down')+' text-[11px]">$'+val.toFixed(2)+'</div></div>'+
+            '<div class="w-16 shrink-0 text-center text-xs"><span class="'+(chgPct>=0?'up':'down')+'">'+(chgPct>=0?'+':'')+chgPct.toFixed(2)+'%</span></div>'+
+        '</div></div>';
     }).join('');
-}
-
-async function loadSparklines(holdings){
-    for(let i=0;i<holdings.length;i++){
-        const h=holdings[i];
-        try{
-            const t=await api('/stock/'+encodeURIComponent(h.symbol)+'/tick');
-            const sparks=document.querySelectorAll('.sparkline[data-symbol="'+h.symbol+'"]');
-            sparks.forEach(spark=>{
-                if(t.sparkline&&t.sparkline.length>2){
-                    const pts=t.sparkline.filter(p=>p!=null);
-                    if(pts.length>2){
-                        const min=Math.min.apply(null,pts),max=Math.max.apply(null,pts);
-                        const range=max-min||1;
-                        const w=44,h=18;
-                        let points='';
-                        for(let i=0;i<pts.length;i++){
-                            const x=(i/(pts.length-1))*w;
-                            const y=h-1-((pts[i]-min)/range)*(h-4);
-                            points+=x.toFixed(1)+','+y.toFixed(1)+' ';
-                        }
-                        const cur=t.price;
-                        spark.innerHTML='<polyline points="'+points.trim()+'" fill="none" stroke="'+(cur!=null&&cur>=pts[0]?'#00B887':'#F54D4D')+'" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>';
-                    }
-                }
-            });
-        }catch(e){}
-    }
 }
 
 function renderPnlCurve(curve){
     if(!curve.length)return;
-    const ctx=document.getElementById('pnl-chart').getContext('2d');
+    var ctx=document.getElementById('pnl-chart').getContext('2d');
     if(pnlChart)pnlChart.destroy();
-    const lastPnl=curve[curve.length-1].pnl;
-    pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(d=>d.date),datasets:[{label:'累计盈亏',data:curve.map(d=>d.pnl),
+    var lastPnl=curve[curve.length-1].pnl;
+    pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(function(d){return d.date}),datasets:[{label:'累计盈亏',data:curve.map(function(d){return d.pnl}),
         borderColor:lastPnl>=0?'#00B887':'#F54D4D',backgroundColor:(lastPnl>=0?'#00B887':'#F54D4D')+'10',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
         options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
             plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1}},
-            scales:{x:{ticks:{color:'#4A5466',maxTicksLimit:8,autoSkip:true},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466',callback:v=>'$'+v.toFixed(0)},grid:{color:'#1A2030'}}}}});
+            scales:{x:{ticks:{color:'#4A5466',maxTicksLimit:8,autoSkip:true},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466',callback:function(v){return '$'+v.toFixed(0)}},grid:{color:'#1A2030'}}}}});
 }
 
 loadPortfolio();
