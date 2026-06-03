@@ -258,17 +258,23 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
                 import logging
                 logging.getLogger('yfinance').setLevel(logging.ERROR)
                 ticker = yf.Ticker(sym)
-                df = ticker.history(period="5d", interval="60m")
+                # Try progressively shorter periods for hourly data
+                for try_period in ["5d", "2d", "1d"]:
+                    for try_interval in ["60m", "30m", "15m"]:
+                        df = ticker.history(period=try_period, interval=try_interval)
+                        if not df.empty:
+                            break
+                    if not df.empty:
+                        break
                 if not df.empty:
                     hourly = {}
                     for idx, row in df.iterrows():
                         close_val = float(row["Close"])
                         if close_val and close_val > 0:
-                            key = str(idx)[:16]  # "2026-06-03 09:30"
+                            key = str(idx)[:16]
                             hourly[key] = close_val
                     if hourly:
                         symbol_histories[sym] = hourly
-                        # Save to cache
                         from datetime import timezone as tz
                         now = datetime.now(tz.utc)
                         records = [{"date": k, "close": v} for k, v in hourly.items()]
