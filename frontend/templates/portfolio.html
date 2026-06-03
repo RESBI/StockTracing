@@ -79,20 +79,24 @@ function renderPies(data){
         if(chartVar)chartVar.destroy();
         const sorted=[...items].sort((a,b)=>b.value-a.value);
         const total=sorted.reduce((s,i)=>s+i.value,0);
-        return new Chart(ctx,{type:'doughnut',data:{labels:sorted.map(d=>d.name),datasets:[{data:sorted.map(d=>d.value),backgroundColor:colors}]},
+        const labels=sorted.map(d=>d.name);
+        const values=sorted.map(d=>d.value);
+        const pcts=sorted.map(d=>(d.value/total*100).toFixed(1)+'%');
+        return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:colors}]},
             options:{responsive:true,maintainAspectRatio:false,
                 plugins:{
-                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:12,boxWidth:8,usePointStyle:true,pointStyleWidth:8,
+                    legend:{position:'right',labels:{color:'#848E9C',font:{size:10},padding:12,boxWidth:8,usePointStyle:true,
                         generateLabels:function(chart){
-                            const data=chart.data;
-                            return data.labels.map((label,i)=>({
-                                text:label+'  '+(data.datasets[0].data[i]/total*100).toFixed(1)+'%',
-                                fillStyle:data.datasets[0].backgroundColor[i],
-                                strokeStyle:data.datasets[0].backgroundColor[i],
-                                lineWidth:0,hidden:false,index:i,pointStyle:'rect',rotation:0
+                            const ds=chart.data.datasets[0];
+                            return chart.data.labels.map((l,i)=>({
+                                text:'  '+pcts[i]+'  '+l,
+                                fillStyle:ds.backgroundColor[i],
+                                strokeStyle:ds.backgroundColor[i],
+                                lineWidth:0,hidden:false,index:i,
+                                fontColor:'#848E9C',pointStyle:'circle',pointStyleWidth:6
                             }));
                         }}},
-                    tooltip:{callbacks:{label:ctx=>ctx.label+': '+(ctx.raw/total*100).toFixed(1)+'% ($'+ctx.raw.toFixed(2)+')'}}
+                    tooltip:{callbacks:{label:ctx=>ctx.label+': '+pcts[ctx.dataIndex]+' ($'+values[ctx.dataIndex].toFixed(2)+')'}}
                 }}});
     }
     symbolChart=makePie(document.getElementById('symbol-pie').getContext('2d'),symbolChart,data.symbol_pie);
