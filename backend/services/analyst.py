@@ -23,7 +23,9 @@ def get_analyst_info(symbol: str) -> dict[str, Any]:
     try:
         existing = db.query(StockCache).filter(StockCache.symbol == sym).first()
         if existing and existing.updated_at:
-            age = (datetime.now(timezone.utc) - existing.updated_at).total_seconds()
+            now = datetime.now(timezone.utc)
+            updated = existing.updated_at.replace(tzinfo=timezone.utc) if existing.updated_at.tzinfo is None else existing.updated_at
+            age = (now - updated).total_seconds()
             if age < CACHE_TTL_SECONDS and existing.target_mean_price is not None:
                 result = {
                     "target_mean": existing.target_mean_price,
