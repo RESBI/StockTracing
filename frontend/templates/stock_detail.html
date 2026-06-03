@@ -67,8 +67,8 @@
         <!-- Analyst -->
         <div id="panel-analyst" class="tab-panel hidden">
             <div class="card p-4 mb-6" id="analyst-targets"></div>
-            <div class="card p-4 mb-6" id="analyst-ratings"></div>
-            <div class="card p-4" id="analyst-changes"></div>
+            <div class="card p-4 mb-6" id="analyst-changes"></div>
+            <div class="card p-4" id="analyst-ratings"></div>
         </div>
 
         <!-- Financials -->
@@ -264,29 +264,22 @@ function renderIndicatorsDetail(tech){
 
 function renderAnalyst(analyst,info){
     const tgt=document.getElementById('analyst-targets');
-    const rat=document.getElementById('analyst-ratings');
     const chg=document.getElementById('analyst-changes');
+    const rat=document.getElementById('analyst-ratings');
 
     const upside=analyst.upside_percent;
+    const downside=analyst.target_low&&info.current_price
+        ? ((analyst.target_low-info.current_price)/info.current_price*100) : null;
+
     tgt.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">目标价预测</h3>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="grid grid-cols-2 gap-3 max-w-md">
             ${kv2('当前价',fmtPrice(info.current_price))}
             ${kv2('目标均价',fmtPrice(analyst.target_mean))}
             ${kv2('目标高价',fmtPrice(analyst.target_high))}
-            ${kv2('目标低价',fmtPrice(analyst.target_low))}
             ${kv2('上涨空间','<span class="'+(upside>0?'up':upside<0?'down':'')+'">'+(upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—')+'</span>')}
+            ${kv2('目标低价',fmtPrice(analyst.target_low))}
+            ${kv2('下行空间','<span class="'+(downside>0?'up':downside<0?'down':'')+'">'+(downside!=null?(downside>0?'+':'')+downside.toFixed(1)+'%':'—')+'</span>')}
         </div>`;
-
-    const ratings=analyst.recent_ratings||[];
-    rat.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">近期评级 (${ratings.length}条)</h3>`;
-    if(ratings.length){
-        rat.innerHTML+=`<div class="space-y-1">${ratings.map(r=>`
-            <div class="flex justify-between text-sm py-1.5 border-b border-bord/30 last:border-0">
-                <span class="text-mute">${r.firm||'—'}</span>
-                <span>${r.action||'—'}</span>
-                <span class="text-mute text-xs">${r.date||''}</span>
-            </div>`).join('')}</div>`;
-    }else{rat.innerHTML+='<p class="text-mute text-sm">暂无数据</p>';}
 
     const changes=analyst.upgrades_downgrades||[];
     chg.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">评级调级 (${changes.length}条)</h3>`;
@@ -300,6 +293,17 @@ function renderAnalyst(analyst,info){
             </div>`;
         }).join('')}</div>`;
     }else{chg.innerHTML+='<p class="text-mute text-sm">暂无数据</p>';}
+
+    const ratings=analyst.recent_ratings||[];
+    rat.innerHTML=`<h3 class="font-semibold text-sm mb-4 text-mute uppercase tracking-wide">近期评级 (${ratings.length}条)</h3>`;
+    if(ratings.length){
+        rat.innerHTML+=`<div class="space-y-1">${ratings.map(r=>`
+            <div class="flex justify-between text-sm py-1.5 border-b border-bord/30 last:border-0">
+                <span class="text-mute">${r.firm||'—'}</span>
+                <span>${r.action||'—'}</span>
+                <span class="text-mute text-xs">${r.date||''}</span>
+            </div>`).join('')}</div>`;
+    }else{rat.innerHTML+='<p class="text-mute text-sm">暂无数据</p>';}
 }
 
 function renderFinancials(fin){
