@@ -65,10 +65,11 @@ def get_crypto_info(symbol: str) -> dict[str, Any] | None:
 
     try:
         ticker = exchange.fetch_ticker(sym)
+        name = sym  # Full trading pair
         return {
-            "symbol": sym.replace("-USDT", ""),
+            "symbol": name,
             "full_symbol": sym,
-            "name": sym.split("-")[0],
+            "name": name,
             "current_price": ticker.get("last"),
             "previous_close": ticker.get("open"),
             "day_high": ticker.get("high"),
@@ -94,7 +95,7 @@ def get_crypto_info(symbol: str) -> dict[str, Any] | None:
         pass
 
     # Fallback: minimal info
-    name = sym.split("-")[0]
+    name = sym  # Full trading pair
     return {
         "symbol": name,
         "full_symbol": sym,
