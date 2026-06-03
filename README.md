@@ -49,11 +49,13 @@ python run.py
 
 | 模块 | 说明 |
 |------|------|
-| 仪表盘 | 自选股实时价格、D/W/M/Y/5m 涨跌、技术信号、PE/市值/目标价 |
-| 个股详情 | 概览/图表/技术指标/机构评级/财报/资讯/AI分析 7 个 Tab |
+| 仪表盘 | 自选股实时价格、走势图、D/W/M/Y/5m涨跌、技术信号、盘前盘后、PE/目标/空间 |
+| 个股详情 | 概览/图表/技术指标/机构评级/财报/资讯/AI分析 7 Tab |
 | 技术扫描 | 批量扫描自选股买卖信号矩阵表 |
-| 狩猎 | 按大盘+领域扫描所有标的，四维评分推荐低估机会 |
+| 狩猎 | 按大盘+领域扫描交易所成分股，四维评分推荐低估机会，支持美股/A股/港股/日股/加密货币 |
 | 交易记录 | 做多/做空开平仓记录，盈亏统计、浮盈浮亏 |
+| 持仓分析 | 饼图占比、收益曲线、持仓明细卡片 |
+| 加密货币 | 支持 BTC/ETH 等 30+ 主流币种，Binance+OKX 双源 |
 | 时刻表 | 24h 刻度条，五地股市开闭盘状态，北京时间 |
 
 ## 目录结构
@@ -83,6 +85,7 @@ StockTracing/
 │   │   ├── cache_updater.py       # 后台缓存更新
 │   │   ├── hunter.py              # 狩猎评分引擎
 │   │   ├── discovery.py           # 交易所成分股发现
+│   │   ├── crypto.py              # 加密货币数据
 │   │   └── trades.py              # 交易记录管理
 │   ├── routers/                   # API 路由
 │   │   ├── stock.py               # REST API 端点
@@ -98,13 +101,14 @@ StockTracing/
         ├── stock_detail.html      # 个股详情
         ├── scan.html              # 技术扫描
         ├── hunt.html              # 狩猎
-        └── trades.html            # 交易记录
+        ├── trades.html            # 交易记录
+        └── portfolio.html         # 持仓分析
 ```
 
 ## 技术栈
 
 - **后端**: Python / FastAPI / SQLAlchemy / SQLite
-- **数据源**: yfinance (Yahoo Finance)
+- **数据源**: yfinance (Yahoo Finance) + Binance/OKX 公开 API
 - **前端**: Jinja2 模板 + Tailwind CSS CDN + Chart.js
 - **AI**: OpenAI 兼容 API
 - **资讯**: DuckDuckGo 搜索
