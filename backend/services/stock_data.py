@@ -250,11 +250,13 @@ def get_tick(symbol: str) -> dict:
         except Exception:
             pass
 
-    # Record current price
+    # Record current price only if changed
     if price_val is not None:
-        _price_history[sym].append((now, price_val))
-        if len(_price_history[sym]) > _MAX_HISTORY:
-            _price_history[sym] = _price_history[sym][-_MAX_HISTORY:]
+        last_p = _price_history[sym][-1][1] if _price_history[sym] else None
+        if last_p is None or abs(price_val - last_p) > 0.0001:
+            _price_history[sym].append((now, price_val))
+            if len(_price_history[sym]) > _MAX_HISTORY:
+                _price_history[sym] = _price_history[sym][-_MAX_HISTORY:]
 
     # Find price ~5 min ago
     change_5m = None

@@ -272,21 +272,25 @@ async function refreshPrices(){
                 }
             }
 
-            // Update sparkline
+            // Update sparkline (only if data changed)
             const spark=grid.querySelector(`.sparkline[data-symbol="${sym}"]`);
             if(spark&&t.sparkline&&t.sparkline.length>2){
-                const pts=t.sparkline.filter(p=>p!=null);
-                if(pts.length>2){
-                    const min=Math.min(...pts),max=Math.max(...pts);
-                    const range=max-min||1;
-                    const w=50,h=18;
-                    let points='';
-                    pts.forEach((p,i)=>{
-                        const x=(i/(pts.length-1))*w;
-                        const y=h-1-((p-min)/range)*(h-4);
-                        points+=`${x.toFixed(1)},${y.toFixed(1)} `;
-                    });
-                    spark.innerHTML=`<polyline points="${points.trim()}" fill="none" stroke="${cur!=null&&cur>=pts[0]?'#00B887':'#F54D4D'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+                const lastLen=parseInt(spark.getAttribute('data-len')||'0');
+                if(t.sparkline.length!==lastLen){
+                    spark.setAttribute('data-len',t.sparkline.length);
+                    const pts=t.sparkline.filter(p=>p!=null);
+                    if(pts.length>2){
+                        const min=Math.min(...pts),max=Math.max(...pts);
+                        const range=max-min||1;
+                        const w=50,h=18;
+                        let points='';
+                        pts.forEach((p,i)=>{
+                            const x=(i/(pts.length-1))*w;
+                            const y=h-1-((p-min)/range)*(h-4);
+                            points+=`${x.toFixed(1)},${y.toFixed(1)} `;
+                        });
+                        spark.innerHTML=`<polyline points="${points.trim()}" fill="none" stroke="${cur!=null&&cur>=pts[0]?'#00B887':'#F54D4D'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+                    }
                 }
             }
         }catch(e){}
