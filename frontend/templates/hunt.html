@@ -166,8 +166,10 @@ function renderHuntResults(data){
 
         // Extract key metrics for vertical display
         const pe=r.pe?r.pe.toFixed(1):'—';
+        const price=r.price?.toFixed(2)||'—';
         const mktCap=r.market_cap?fmtNum(r.market_cap):'—';
         const upsideStr=upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—';
+        const targetPrice=r.target_mean?r.target_mean.toFixed(2):'—';
         const rec=r.recommendation||'—';
         const buyN=(sc.technical?.details||[]).filter(d=>d.includes('买入')).length||0;
         const sellN=(sc.technical?.details||[]).filter(d=>d.includes('卖出')).length||0;
@@ -192,7 +194,7 @@ function renderHuntResults(data){
                 <span class="text-base font-bold w-20 shrink-0">$ ${r.price?.toFixed(2)||'—'}</span>
                 <div class="flex gap-3 shrink-0 text-center text-[10px]">
                     <div><span class="text-mute block">PE</span><span>${pe}</span></div>
-                    <div><span class="text-mute block">市值</span><span>${mktCap}</span></div>
+                    <div><span class="text-mute block">目标价</span><span>${targetPrice}</span></div>
                     <div><span class="text-mute block">目标</span><span class="${upside>0?'up':upside<0?'down':''}">${upsideStr}</span></div>
                     <div><span class="text-mute block">信号</span><span class="${buyN>sellN?'up':sellN>buyN?'down':''}">${buyN}B/${sellN}S</span></div>
                 </div>
