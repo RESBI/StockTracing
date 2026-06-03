@@ -387,8 +387,8 @@ def api_trade_stats():
 
 
 @router.get("/trades/portfolio")
-def api_portfolio():
-    return get_portfolio()
+def api_portfolio(interval: str = "1d"):
+    return get_portfolio(interval=interval)
 
 
 @router.post("/trades")

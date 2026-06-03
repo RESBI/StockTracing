@@ -157,7 +157,7 @@ def get_trade_stats() -> dict[str, Any]:
     }
 
 
-def get_portfolio() -> dict[str, Any]:
+def get_portfolio(interval: str = "1d") -> dict[str, Any]:
     from backend.database.models import StockCache, SessionLocal
     from collections import defaultdict
     trades = _load()
@@ -201,7 +201,7 @@ def get_portfolio() -> dict[str, Any]:
             })
 
     # P&L curve data
-    pnl_curve = _compute_pnl_curve(db)
+    pnl_curve = _compute_pnl_curve(db, interval)
     db.close()
 
     # Symbol pie
@@ -219,7 +219,7 @@ def get_portfolio() -> dict[str, Any]:
     }
 
 
-def _compute_pnl_curve(db) -> list[dict]:
+def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
     from backend.database.models import StockCache, AnalysisCache
     from datetime import datetime, timedelta
     from collections import defaultdict
@@ -233,14 +233,14 @@ def _compute_pnl_curve(db) -> list[dict]:
         sym = t.get("symbol", "").upper()
         if sym in symbol_histories:
             continue
-        hist = db.query(AnalysisCache).filter(
-            AnalysisCache.symbol == sym,
-            AnalysisCache.analysis_type == "history_6mo_1d",
-        ).first()
-        if hist and hist.data:
-            records = hist.data.get("records", [])
-            symbol_histories[sym] = {r["date"]: r["close"] for r in records if r.get("close")}
-        # Try shorter periods
+        if interval == "1h":
+            hist = db.query(AnalysisCache).filter(
+                AnalysisCache.symbol == sym,
+                AnalysisCache.analysis_type == "history_5d_60m",
+            ).first()
+            if hist and hist.data:
+                records = hist.data.get("records", [])
+                symbol_histories[sym] = {r["date"][:16]: r["close"] for r in records if r.get("close")}
         if sym not in symbol_histories:
             for period in ["1y", "6mo", "3mo", "1mo"]:
                 key = f"history_{period}_1d"

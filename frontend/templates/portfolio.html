@@ -31,7 +31,13 @@
 
     <!-- P&L Curve -->
     <div class="card p-4 mb-6">
-        <h3 class="text-sm font-semibold text-mute mb-3">收益曲线</h3>
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-mute">收益曲线</h3>
+            <div class="flex gap-1">
+                <button class="btn btn-outline btn-xs" id="btn-1d" onclick="loadPnlCurve('1d')">日线</button>
+                <button class="btn btn-acc btn-xs" id="btn-1h" onclick="loadPnlCurve('1h')">小时</button>
+            </div>
+        </div>
         <div style="position:relative;height:280px"><canvas id="pnl-chart"></canvas></div>
     </div>
 </div>
@@ -52,6 +58,15 @@ async function loadPortfolio(){
         document.getElementById('s-syms').textContent=data.symbol_pie.length;
         renderPies(data);
         renderHoldings(data.holdings);
+        renderPnlCurve(data.pnl_curve);
+    }catch(e){}
+}
+
+async function loadPnlCurve(interval){
+    document.getElementById('btn-1d').className='btn '+(interval==='1d'?'btn-acc':'btn-outline')+' btn-xs';
+    document.getElementById('btn-1h').className='btn '+(interval==='1h'?'btn-acc':'btn-outline')+' btn-xs';
+    try{
+        const data=await api('/trades/portfolio?interval='+interval);
         renderPnlCurve(data.pnl_curve);
     }catch(e){}
 }
