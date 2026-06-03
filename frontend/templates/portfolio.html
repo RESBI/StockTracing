@@ -7,8 +7,8 @@
 
     <!-- Summary -->
     <div class="grid grid-cols-4 gap-3 mb-6" id="summary-row">
+        <div class="card p-3 text-center"><p class="text-xs text-mute">持仓成本</p><p class="text-xl font-bold" id="s-cost">—</p></div>
         <div class="card p-3 text-center"><p class="text-xs text-mute">持仓总值</p><p class="text-xl font-bold" id="s-total">—</p></div>
-        <div class="card p-3 text-center"><p class="text-xs text-mute">持仓数量</p><p class="text-xl font-bold" id="s-count">—</p></div>
         <div class="card p-3 text-center"><p class="text-xs text-mute">总浮盈</p><p class="text-xl font-bold" id="s-pnl">—</p></div>
         <div class="card p-3 text-center"><p class="text-xs text-mute">标的总数</p><p class="text-xl font-bold" id="s-syms">—</p></div>
     </div>
@@ -49,8 +49,9 @@ let symbolChart=null,sectorChart=null,pnlChart=null;
 async function loadPortfolio(){
     try{
         const data=await api('/trades/portfolio?interval=1h');
+        const totalCost=data.total_cost;
+        document.getElementById('s-cost').textContent='$'+totalCost.toFixed(2);
         document.getElementById('s-total').textContent='$'+data.total_value.toFixed(2);
-        document.getElementById('s-count').textContent=data.holdings.length;
         const totalPnl=data.holdings.reduce((s,h)=>s+h.pnl,0);
         const pnlEl=document.getElementById('s-pnl');
         pnlEl.textContent='$'+totalPnl.toFixed(2);

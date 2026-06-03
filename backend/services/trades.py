@@ -189,8 +189,10 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
         m["total_cost"] += open_p * qty
 
     holdings = []
+    total_cost = 0.0
     for sym, m in merged.items():
         avg_price = m["total_cost"] / m["total_qty"] if m["total_qty"] > 0 else 0
+        total_cost += m["total_cost"]
         cur_p = m["cur_p"]
         direction = m["direction"]
         qty = m["total_qty"]
@@ -227,6 +229,7 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
 
     return {
         "holdings": holdings,
+        "total_cost": round(total_cost, 2),
         "total_value": round(total_value, 2),
         "symbol_pie": symbol_pie,
         "sector_pie": sector_pie,
