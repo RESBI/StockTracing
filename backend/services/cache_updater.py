@@ -66,6 +66,20 @@ class CacheUpdater:
         info = ticker.info or {}
 
         price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+        pre_price = info.get("preMarketPrice")
+        post_price = info.get("postMarketPrice")
+        market_state = info.get("marketState", "")
+
+        # Update tick cache with extended hours data
+        self._ticks[sym] = {
+            "price": price,
+            "ts": time.time(),
+            "pre_market_price": pre_price,
+            "post_market_price": post_price,
+            "previous_close": info.get("previousClose") or info.get("regularMarketPreviousClose"),
+            "market_state": market_state,
+        }
+
         data = {
             "symbol": sym,
             "name": info.get("longName") or info.get("shortName", ""),
@@ -93,8 +107,12 @@ class CacheUpdater:
             "updated_at": datetime.now(timezone.utc),
         }
 
-        # Update in-memory tick cache too
-        self._ticks[sym] = {"price": price, "ts": time.time()}
+        # Update in-memory tick cache too (updates price, preserves extended data)
+        if sym in self._ticks:
+            self._ticks[sym]["price"] = price
+            self._ticks[sym]["ts"] = time.time()
+        else:
+            self._ticks[sym] = {"price": price, "ts": time.time()}
 
         db = SessionLocal()
         try:
@@ -112,7 +130,15 @@ class CacheUpdater:
         sym = symbol.upper().strip()
         tick = self._ticks.get(sym)
         if tick and time.time() - tick["ts"] < 120:
-            return {"symbol": sym, "price": tick["price"], "change_5m": None}
+            return {
+                "symbol": sym,
+                "price": tick["price"],
+                "change_5m": None,
+                "pre_market_price": tick.get("pre_market_price"),
+                "post_market_price": tick.get("post_market_price"),
+                "previous_close": tick.get("previous_close"),
+                "market_state": tick.get("market_state"),
+            }
         return None
 
     def queue_symbols(self, symbols: list[str]) -> None:
