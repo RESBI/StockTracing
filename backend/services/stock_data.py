@@ -280,4 +280,5 @@ def get_tick(symbol: str) -> dict:
         "price": price_val,
         "change_5m": change_5m,
         "sparkline": sparkline,
+        "prev_close": None,
     }

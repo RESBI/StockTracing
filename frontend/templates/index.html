@@ -61,7 +61,8 @@
             <span class="w-28 shrink-0">代码 / 名称</span>
             <span class="w-28 shrink-0">价格</span>
             <span style="width:48px" class="shrink-0 text-center">走势</span>
-            <span class="w-20 shrink-0 text-center">5m 涨跌</span>
+            <span class="w-20 shrink-0 text-center">今日</span>
+            <span class="w-20 shrink-0 text-center">5m</span>
             <span class="w-20 shrink-0 text-center">D 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">W 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">M 涨跌/信号</span>
@@ -157,6 +158,10 @@ function makeBar(sym, data){
     const pdSig=periods.signals||{};
     const comp=tech.signals?tech.signals.find(x=>x.indicator==='综合评分'):null;
     const upside=analyst.upside_percent;
+    // Today change from info
+    const todayChg=info.previous_close&&curPrice?((curPrice-info.previous_close)/info.previous_close*100):null;
+    const todayStr=todayChg!=null?(todayChg>=0?'+':'')+todayChg.toFixed(2)+'%':'—';
+    const todayCls=todayChg!=null?(todayChg>=0?'up':'down'):'';
 
     function chgSpan(val){
         if(val==null||val===undefined)return'<span class="text-mute">—</span>';
@@ -170,13 +175,13 @@ function makeBar(sym, data){
     }
 
     const curPrice=info.current_price;
-    const prevPrice=priceMap[sym];
+    const prevPrice=priceMap[sym]?.price;
     const _crypto=isCrypto(info);
     let flashClass='';
     if(prevPrice!=null&&curPrice!=null&&prevPrice!==curPrice){
         flashClass=curPrice>prevPrice?'price-flash-up':'price-flash-down';
     }
-    priceMap[sym]=curPrice;
+    priceMap[sym]={price:curPrice, prevClose:info.previous_close};
 
     return `<div class="card px-4 py-1.5 hover:border-acc/30 cursor-pointer transition-colors" style="min-height:44px" onclick="location.href='/stock/${sym}'">
         <div class="flex items-center gap-3 h-full">
@@ -186,6 +191,9 @@ function makeBar(sym, data){
             </div>
             ${priceHTML(sym, curPrice, prevPrice, info.previous_close, flashClass, _crypto)}
             <svg class="sparkline shrink-0" data-symbol="${sym}" width="48" height="18" style="overflow:visible"></svg>
+            <div class="w-20 shrink-0 text-center text-xs">
+                <span class="tick-today font-medium ${todayCls}" data-symbol="${sym}" data-today="${todayChg||''}">${todayStr}</span>
+            </div>
             <div class="w-20 shrink-0 text-center text-xs">
                 <span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span>
             </div>
@@ -242,11 +250,12 @@ async function refreshPrices(){
             const t=await api('/stock/'+sym+'/tick');
             const cur=t.price;
             const chg5m=t.change_5m;
-            const prev=priceMap[sym];
+            const prev=priceMap[sym]?.price;
+            const prevClose=priceMap[sym]?.prevClose;
 
             // Update price cell
             if(cur!=null&&prev!=null&&cur!==prev){
-                priceMap[sym]=cur;
+                priceMap[sym].price=cur;
                 const cell=grid.querySelector(`.price-cell[data-symbol="${sym}"]`);
                 if(cell){
                     cell.classList.remove('price-flash-up','price-flash-down','price-up','price-down');
@@ -259,7 +268,19 @@ async function refreshPrices(){
                     }
                 }
             }else if(cur!=null&&prev==null){
-                priceMap[sym]=cur;
+                priceMap[sym]={price:cur, prevClose:prevClose};
+            }
+
+            // Update today cell
+            const td=grid.querySelector(`.tick-today[data-symbol="${sym}"]`);
+            if(td&&cur!=null&&prevClose!=null){
+                const todayChg=((cur-prevClose)/prevClose*100);
+                const old=td.getAttribute('data-today');
+                if(old!==String(todayChg.toFixed(2))){
+                    td.setAttribute('data-today',String(todayChg.toFixed(2)));
+                    td.textContent=(todayChg>=0?'+':'')+todayChg.toFixed(2)+'%';
+                    td.className='tick-today font-medium '+(todayChg>=0?'up':'down');
+                }
             }
 
             // Update 5m cell
