@@ -17,15 +17,35 @@ CRYPTO_SYMBOLS = [
 def _get_client():
     try:
         import ccxt
-        # Try Binance first (most accessible)
-        return ccxt.binance({"enableRateLimit": True, "timeout": 10000})
+        return ccxt.binance({"enableRateLimit": True, "timeout": 5000})
     except Exception:
         pass
     try:
         import ccxt
-        return ccxt.okx({"enableRateLimit": True, "timeout": 10000})
+        return ccxt.okx({"enableRateLimit": True, "timeout": 5000})
     except Exception:
         return None
+
+
+def _fetch_ticker_http(sym: str) -> dict | None:
+    """Lightweight HTTP fetch without ccxt (Binance public API)."""
+    try:
+        import requests
+        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym.replace('-','')}"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "last": float(data.get("lastPrice", 0)),
+                "open": float(data.get("openPrice", 0)),
+                "high": float(data.get("highPrice", 0)),
+                "low": float(data.get("lowPrice", 0)),
+                "baseVolume": float(data.get("volume", 0)),
+                "percentage": float(data.get("priceChangePercent", 0)),
+            }
+    except Exception:
+        pass
+    return None
 
 
 @retry_on_rate_limit
@@ -36,32 +56,45 @@ def get_crypto_info(symbol: str) -> dict[str, Any] | None:
 
     exchange = _get_client()
     if not exchange:
-        # Return minimal info when exchange unreachable
-        name = sym.split("-")[0]
-        return {
-            "symbol": name,
-            "full_symbol": sym,
-            "name": name,
-            "current_price": None,
-            "previous_close": None,
-            "day_high": None,
-            "day_low": None,
-            "volume": None,
-            "change_24h": None,
-            "market_cap": None,
-            "recommendation": "",
-            "target_mean_price": None,
-            "target_high_price": None,
-            "target_low_price": None,
-            "number_of_analysts": 0,
-            "pe_ratio": None,
-            "eps": None,
-            "dividend_yield": None,
-            "beta": None,
-            "sector": "加密货币",
-            "industry": "数字货币",
-            "raw_info": {},
-        }
+        http_data = _fetch_ticker_http(sym)
+        return _build_crypto_info(sym, http_data)
+
+    try:
+        ticker = exchange.fetch_ticker(sym)
+        return _build_crypto_info(sym, ticker)
+    except Exception:
+        pass
+
+    http_data = _fetch_ticker_http(sym)
+    return _build_crypto_info(sym, http_data)
+
+
+def _build_crypto_info(sym: str, ticker: dict | None) -> dict[str, Any]:
+    name = sym  # Full trading pair
+    return {
+        "symbol": name,
+        "full_symbol": sym,
+        "name": name,
+        "current_price": ticker.get("last") if ticker else None,
+        "previous_close": ticker.get("open") if ticker else None,
+        "day_high": ticker.get("high") if ticker else None,
+        "day_low": ticker.get("low") if ticker else None,
+        "volume": ticker.get("baseVolume") if ticker else None,
+        "change_24h": ticker.get("percentage") if ticker else None,
+        "market_cap": ticker.get("info", {}).get("marketCap") if ticker and isinstance(ticker.get("info"), dict) else None,
+        "recommendation": "",
+        "target_mean_price": None,
+        "target_high_price": None,
+        "target_low_price": None,
+        "number_of_analysts": 0,
+        "pe_ratio": None,
+        "eps": None,
+        "dividend_yield": None,
+        "beta": None,
+        "sector": "加密货币",
+        "industry": "数字货币",
+        "raw_info": ticker or {},
+    }
 
     try:
         ticker = exchange.fetch_ticker(sym)
