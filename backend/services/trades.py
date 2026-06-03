@@ -220,22 +220,49 @@ def get_portfolio() -> dict[str, Any]:
 
 
 def _compute_pnl_curve(db) -> list[dict]:
-    from backend.database.models import StockCache
+    from backend.database.models import StockCache, AnalysisCache
     from datetime import datetime, timedelta
     from collections import defaultdict
     trades = _load()
     if not trades:
         return []
 
+    # Get historical prices for each symbol from cache
+    symbol_histories = {}
+    for t in trades:
+        sym = t.get("symbol", "").upper()
+        if sym in symbol_histories:
+            continue
+        hist = db.query(AnalysisCache).filter(
+            AnalysisCache.symbol == sym,
+            AnalysisCache.analysis_type == "history_6mo_1d",
+        ).first()
+        if hist and hist.data:
+            records = hist.data.get("records", [])
+            symbol_histories[sym] = {r["date"]: r["close"] for r in records if r.get("close")}
+        # Try shorter periods
+        if sym not in symbol_histories:
+            for period in ["1y", "6mo", "3mo", "1mo"]:
+                key = f"history_{period}_1d"
+                hist = db.query(AnalysisCache).filter(
+                    AnalysisCache.symbol == sym,
+                    AnalysisCache.analysis_type == key,
+                ).first()
+                if hist and hist.data:
+                    records = hist.data.get("records", [])
+                    symbol_histories[sym] = {r["date"]: r["close"] for r in records if r.get("close")}
+                    break
+
     # Find date range
     all_dates = []
     for t in trades:
         od_raw = t.get("open_date")
-        cd_raw = t.get("close_date")
         if od_raw:
             all_dates.append(od_raw[:10])
-        if cd_raw:
-            all_dates.append(cd_raw[:10])
+            # Also try to get history for this symbol close to open date
+            sym = t.get("symbol", "").upper()
+            if sym not in symbol_histories:
+                symbol_histories[sym] = {}
 
     if not all_dates:
         return []
@@ -244,48 +271,62 @@ def _compute_pnl_curve(db) -> list[dict]:
     start = datetime.strptime(all_dates[0], "%Y-%m-%d")
     end = datetime.now()
 
-    # Build daily P&L
-    daily_pnl = defaultdict(float)
-    for t in trades:
-        open_p = t.get("open_price")
-        close_p = t.get("close_price")
-        qty = t.get("quantity", 0) or 0
-        direction = t.get("direction", "long")
-        od_raw = t.get("open_date")
-        cd_raw = t.get("close_date")
-        od = od_raw[:10] if od_raw else ""
-        cd = cd_raw[:10] if cd_raw else ""
-        sym = t.get("symbol", "")
-
-        if not od or not open_p:
-            continue
-
-        is_closed = cd and close_p
-        if is_closed:
-            if direction == "long":
-                pnl = (close_p - open_p) * qty
-            else:
-                pnl = (open_p - close_p) * qty
-            cd_dt = datetime.strptime(cd, "%Y-%m-%d")
-            daily_pnl[cd_dt.strftime("%Y-%m-%d")] += pnl
-        else:
-            # Open position: use current price
-            sc = db.query(StockCache).filter(StockCache.symbol == sym.upper()).first() if db else None
-            cur_p = sc.current_price if sc and sc.current_price else open_p
-            if direction == "long":
-                pnl = (cur_p - open_p) * qty
-            else:
-                pnl = (open_p - cur_p) * qty
-            daily_pnl[end.strftime("%Y-%m-%d")] += pnl
-
-    # Build cumulative curve
+    # For each day, compute total portfolio value
     curve = []
-    cumulative = 0.0
     current = start
     while current <= end:
         day_str = current.strftime("%Y-%m-%d")
-        cumulative += daily_pnl.get(day_str, 0)
-        curve.append({"date": day_str, "pnl": round(cumulative, 2)})
+        day_total = 0.0
+        for t in trades:
+            open_p = t.get("open_price")
+            qty = t.get("quantity", 0) or 0
+            if not open_p or not qty:
+                continue
+            direction = t.get("direction", "long")
+            od_raw = t.get("open_date")
+            cd_raw = t.get("close_date")
+            if not od_raw:
+                continue
+            od = od_raw[:10]
+            cd = cd_raw[:10] if cd_raw else None
+            sym = t.get("symbol", "").upper()
+
+            # Check if this trade was active on this day
+            if od > day_str:
+                continue  # Not opened yet
+            if cd and cd < day_str:
+                continue  # Already closed
+
+            # Get price for this day
+            price_map = symbol_histories.get(sym, {})
+            price = price_map.get(day_str)
+
+            if price is None:
+                if cd and cd == day_str:
+                    price = t.get("close_price") or price
+                elif od == day_str:
+                    price = open_p
+                else:
+                    # Use last known price
+                    prev_date = current - timedelta(days=1)
+                    while prev_date >= start:
+                        prev_str = prev_date.strftime("%Y-%m-%d")
+                        prev_p = price_map.get(prev_str)
+                        if prev_p:
+                            price = prev_p
+                            break
+                        prev_date -= timedelta(days=1)
+                    if price is None:
+                        price = open_p
+
+            if price:
+                if direction == "long":
+                    pnl = (price - open_p) * qty
+                else:
+                    pnl = (open_p - price) * qty
+                day_total += pnl
+
+        curve.append({"date": day_str, "pnl": round(day_total, 2)})
         current += timedelta(days=1)
 
     return curve
