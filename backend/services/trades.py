@@ -229,12 +229,12 @@ def _compute_pnl_curve(db) -> list[dict]:
     # Find date range
     all_dates = []
     for t in trades:
-        od = t.get("open_date", "")
-        cd = t.get("close_date", "")
-        if od:
-            all_dates.append(od[:10])
-        if cd:
-            all_dates.append(cd[:10])
+        od_raw = t.get("open_date")
+        cd_raw = t.get("close_date")
+        if od_raw:
+            all_dates.append(od_raw[:10])
+        if cd_raw:
+            all_dates.append(cd_raw[:10])
 
     if not all_dates:
         return []
@@ -250,8 +250,10 @@ def _compute_pnl_curve(db) -> list[dict]:
         close_p = t.get("close_price")
         qty = t.get("quantity", 0) or 0
         direction = t.get("direction", "long")
-        od = t.get("open_date", "")[:10]
-        cd = t.get("close_date", "")[:10]
+        od_raw = t.get("open_date")
+        cd_raw = t.get("close_date")
+        od = od_raw[:10] if od_raw else ""
+        cd = cd_raw[:10] if cd_raw else ""
         sym = t.get("symbol", "")
 
         if not od or not open_p:
