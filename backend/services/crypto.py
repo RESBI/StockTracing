@@ -90,7 +90,35 @@ def get_crypto_info(symbol: str) -> dict[str, Any] | None:
             "raw_info": ticker,
         }
     except Exception:
-        return None
+        # Return minimal info when API call fails
+        pass
+
+    # Fallback: minimal info
+    name = sym.split("-")[0]
+    return {
+        "symbol": name,
+        "full_symbol": sym,
+        "name": name,
+        "current_price": None,
+        "previous_close": None,
+        "day_high": None,
+        "day_low": None,
+        "volume": None,
+        "change_24h": None,
+        "market_cap": None,
+        "recommendation": "",
+        "target_mean_price": None,
+        "target_high_price": None,
+        "target_low_price": None,
+        "number_of_analysts": 0,
+        "pe_ratio": None,
+        "eps": None,
+        "dividend_yield": None,
+        "beta": None,
+        "sector": "加密货币",
+        "industry": "数字货币",
+        "raw_info": {},
+    }
 
 
 def get_crypto_history(symbol: str, period: str = "30d") -> list[dict]:
