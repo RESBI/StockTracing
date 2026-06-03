@@ -49,6 +49,29 @@ async function initHunt(){
         mkts.forEach(m=>sel.innerHTML+=`<option value="${m}">${m}</option>`);
         if(mkts.length)loadSectors();
     }catch(e){}
+    loadLastSession();
+}
+
+async function loadLastSession(){
+    try{
+        const rows=await api('/hunt/history');
+        if(!rows||!rows.length)return;
+        const last=rows[0];
+        // Restore market/sector from history
+        const mktEl=document.getElementById('hunt-market');
+        const secEl=document.getElementById('hunt-sector');
+        if([...mktEl.options].some(o=>o.value===last.market)){
+            mktEl.value=last.market;
+            await loadSectors();
+        }
+        if([...secEl.options].some(o=>o.value===last.sector)){
+            secEl.value=last.sector;
+        }
+        const data=await api('/hunt/history/'+last.id);
+        document.getElementById('hunt-status').classList.add('hidden');
+        renderHuntResults(data);
+        document.getElementById('hunt-results').classList.remove('hidden');
+    }catch(e){}
 }
 async function loadSectors(){
     const m=document.getElementById('hunt-market').value;
@@ -70,6 +93,7 @@ async function runHunt(){
         stat.classList.add('hidden');
         renderHuntResults(r);
         document.getElementById('hunt-results').classList.remove('hidden');
+        try{localStorage.setItem('hunt-market',m);localStorage.setItem('hunt-sector',s);}catch(e){}
     }catch(e){
         stat.innerHTML='<p class="text-down">扫描失败: '+e.message+'</p>';
     }
