@@ -27,8 +27,7 @@ def _get_client():
         return None
 
 
-def _fetch_ticker_http(sym: str) -> dict | None:
-    """Lightweight HTTP fetch without ccxt (Binance public API)."""
+def _fetch_ticker_binance(sym: str) -> dict | None:
     try:
         import requests
         url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym.replace('-','')}"
@@ -46,6 +45,31 @@ def _fetch_ticker_http(sym: str) -> dict | None:
     except Exception:
         pass
     return None
+
+
+def _fetch_ticker_okx(sym: str) -> dict | None:
+    try:
+        import requests
+        inst = sym.replace("-", "-")  # BTC-USDT
+        url = f"https://www.okx.com/api/v5/market/ticker?instId={inst}"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json().get("data", [{}])[0]
+            return {
+                "last": float(data.get("last", 0)),
+                "open": float(data.get("open24h", 0)),
+                "high": float(data.get("high24h", 0)),
+                "low": float(data.get("low24h", 0)),
+                "baseVolume": float(data.get("vol24h", 0)),
+                "percentage": 0,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_ticker_http(sym: str) -> dict | None:
+    return _fetch_ticker_binance(sym) or _fetch_ticker_okx(sym)
 
 
 @retry_on_rate_limit
@@ -202,17 +226,23 @@ def get_crypto_tick(symbol: str) -> dict | None:
 
 
 def _fetch_sparkline(symbol: str) -> list[float]:
-    """Get today's intraday prices for sparkline."""
+    """Get today's intraday prices from Binance or OKX."""
     sym = symbol.upper().strip()
     if "-" not in sym:
         sym = sym + "-USDT"
     try:
         import requests
+        # Binance
         url = f"https://api.binance.com/api/v3/klines?symbol={sym.replace('-','')}&interval=5m&limit=80"
         resp = requests.get(url, timeout=3)
         if resp.status_code == 200:
-            data = resp.json()
-            return [float(c[4]) for c in data]  # Close prices
+            return [float(c[4]) for c in resp.json()]
+        # OKX
+        url2 = f"https://www.okx.com/api/v5/market/candles?instId={sym}&bar=5m&limit=80"
+        resp2 = requests.get(url2, timeout=3)
+        if resp2.status_code == 200:
+            data = resp2.json().get("data", [])
+            return [float(c[4]) for c in reversed(data)]
     except Exception:
         pass
     return []
