@@ -71,8 +71,9 @@
             <span class="w-14 shrink-0 text-center">PE</span>
             <span class="w-14 shrink-0 text-center">目标</span>
             <span class="w-14 shrink-0 text-center">空间</span>
+            <span class="flex-1"></span>
         </div>
-        <div id="dashboard" class="space-y-1.5 min-w-[880px]"></div>
+        <div id="dashboard" class="space-y-1.5"></div>
     </div>
 </div></div>
 {% endblock %}
@@ -210,6 +211,7 @@ function makeBar(sym, data){
             <span class="w-14 shrink-0 text-xs text-center"><span class="text-mute">${info.pe_ratio?.toFixed(1)||'—'}</span></span>
             <span class="w-14 shrink-0 text-xs text-center"><span>${info.target_mean_price?info.target_mean_price.toFixed(0):'—'}</span></span>
             <span class="w-14 shrink-0 text-xs text-center"><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>
+            <span class="flex-1"></span>
         </div>
     </div>`;
 }
