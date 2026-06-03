@@ -34,8 +34,8 @@
         <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-mute">收益曲线</h3>
             <div class="flex gap-1">
-                <button class="btn btn-outline btn-xs" id="btn-1d" onclick="loadPnlCurve('1d')">日线</button>
-                <button class="btn btn-acc btn-xs" id="btn-1h" onclick="loadPnlCurve('1h')">小时</button>
+                <button class="btn btn-acc btn-xs" id="btn-1d" onclick="loadPnlCurve('1d')">日线</button>
+                <button class="btn btn-outline btn-xs" id="btn-1h" onclick="loadPnlCurve('1h')">小时</button>
             </div>
         </div>
         <div style="position:relative;height:280px"><canvas id="pnl-chart"></canvas></div>
@@ -48,7 +48,7 @@ let symbolChart=null,sectorChart=null,pnlChart=null;
 
 async function loadPortfolio(){
     try{
-        const data=await api('/trades/portfolio');
+        const data=await api('/trades/portfolio?interval=1d');
         document.getElementById('s-total').textContent='$'+data.total_value.toFixed(2);
         document.getElementById('s-count').textContent=data.holdings.length;
         const totalPnl=data.holdings.reduce((s,h)=>s+h.pnl,0);
