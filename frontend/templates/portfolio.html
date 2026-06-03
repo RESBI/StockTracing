@@ -5,28 +5,28 @@
     <h1 class="text-xl font-bold mb-1">持仓分析</h1>
     <p class="text-sm text-mute mb-6">当前持仓、盈亏分布与收益曲线</p>
 
-    <!-- Top row: Summary + Symbol pie -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
-        <!-- Left: stacked summary -->
-        <div class="space-y-3">
+    <!-- Top row: Summary + Pies -->
+    <div class="grid grid-cols-2 gap-4 mb-6" style="min-height:0">
+        <!-- Left: stacked summary (match height to pies) -->
+        <div class="flex flex-col justify-between gap-3">
             <div class="grid grid-cols-2 gap-3">
                 <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓成本</p><p class="text-2xl font-bold" id="s-cost">—</p></div>
                 <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">持仓总值</p><p class="text-2xl font-bold" id="s-total">—</p></div>
             </div>
-            <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">总浮盈</p><p class="text-2xl font-bold" id="s-pnl">—</p></div>
-            <div class="card p-4 text-center"><p class="text-xs text-mute mb-1">标的总数</p><p class="text-2xl font-bold" id="s-syms">—</p></div>
+            <div class="card p-4 text-center flex-1 flex flex-col justify-center"><p class="text-xs text-mute mb-1">总浮盈</p><p class="text-2xl font-bold" id="s-pnl">—</p></div>
+            <div class="card p-4 text-center flex-1 flex flex-col justify-center"><p class="text-xs text-mute mb-1">标的总数</p><p class="text-2xl font-bold" id="s-syms">—</p></div>
         </div>
-        <!-- Right: Symbol pie -->
-        <div class="card p-4">
-            <h3 class="text-sm font-semibold text-mute mb-3">标的占比</h3>
-            <div style="position:relative;height:260px"><canvas id="symbol-pie"></canvas></div>
+        <!-- Right: Symbol + Sector pies stacked -->
+        <div class="space-y-4">
+            <div class="card p-4">
+                <h3 class="text-sm font-semibold text-mute mb-3">标的占比</h3>
+                <div style="position:relative;height:220px"><canvas id="symbol-pie"></canvas></div>
+            </div>
+            <div class="card p-4">
+                <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
+                <div style="position:relative;height:220px"><canvas id="sector-pie"></canvas></div>
+            </div>
         </div>
-    </div>
-
-    <!-- Sector pie -->
-    <div class="card p-4 mb-6">
-        <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
-        <div style="position:relative;height:220px"><canvas id="sector-pie"></canvas></div>
     </div>
 
     <!-- P&L Curve -->
