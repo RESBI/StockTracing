@@ -17,11 +17,11 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">标的占比</h3>
-            <canvas id="symbol-pie" height="200"></canvas>
+            <div style="position:relative;height:200px"><canvas id="symbol-pie"></canvas></div>
         </div>
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">领域占比</h3>
-            <canvas id="sector-pie" height="200"></canvas>
+            <div style="position:relative;height:200px"><canvas id="sector-pie"></canvas></div>
         </div>
         <div class="card p-4">
             <h3 class="text-sm font-semibold text-mute mb-3">持仓明细</h3>
@@ -32,7 +32,7 @@
     <!-- P&L Curve -->
     <div class="card p-4 mb-6">
         <h3 class="text-sm font-semibold text-mute mb-3">收益曲线</h3>
-        <div style="height:280px"><canvas id="pnl-chart"></canvas></div>
+        <div style="position:relative;height:280px"><canvas id="pnl-chart"></canvas></div>
     </div>
 </div>
 {% endblock %}
