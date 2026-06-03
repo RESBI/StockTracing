@@ -4,19 +4,18 @@
 
 ![Demo](images/GIF%2003-06-2026%2018-43-00.gif)
 
-实时追踪股票行情与加密货币，技术指标计算，AI 分析总结，机构评级整合，交易记录管理，持仓盈亏分析，多市场狩猎扫描。
-
----
+实时追踪股票行情，技术指标计算，AI 分析总结，机构评级整合，交易记录管理，多市场狩猎扫描。
 
 ## 快速开始
 
 ```bash
 pip install -r requirements.txt
 python run.py
-# 访问 http://localhost:8000
 ```
 
-### LLM 配置（可选）
+访问 http://localhost:8000
+
+## LLM 配置
 
 编辑 `data/config.json`：
 
@@ -32,7 +31,7 @@ python run.py
 
 支持 OpenAI / DeepSeek / Ollama 等兼容 API。
 
-### 代理配置（可选）
+## 代理配置
 
 ```json
 {
@@ -44,158 +43,86 @@ python run.py
 }
 ```
 
-保存后即时生效，支持 `PUT /api/config` 在线修改。
+保存后即时生效，无需重启。
 
----
+## 功能概览
 
-## 功能模块
-
-### 📊 仪表盘
-
-- 自选股/加密货币实时价格横条
-- **走势图**：当日 5 分钟迷你走势（SVG，涨绿跌红）
-- **价格动画**：变化时背景闪烁 + 新数字部分字符滑入
-- **多周期**：今日 / 5m / D / W / M / Y 涨跌 + B/S/N 信号
-- **盘前盘后**：非交易时段显示盘前/盘后价格
-- **指标**：PE / 目标价 / 上涨空间
-- **1 秒轮询**：后台缓存防限流
-- **自适应宽度**：宽屏撑满，窄屏横向滚动
-
-### 📈 个股详情（7 Tab）
-
-| Tab | 内容 |
-|-----|------|
-| 概览 | 价格/涨跌/市值/PE/EPS/Beta + 综合建议 |
-| 图表 | Chart.js（1月/3月/6月/1年） |
-| 技术指标 | SMA/EMA/MACD/RSI/Bollinger/ATR/OBV/Stochastic + 买卖信号 |
-| 机构评级 | 3×2 目标价网格 + 调级 + 近期评级 |
-| 财报 | 利润表/负债表/现金流（年度+季度） |
-| 资讯 | 点击加载，yfinance+DuckDuckGo |
-| AI 分析 | 最新分析 + 历史记录，可手动刷新 |
-
-### 🔎 技术扫描
-
-- 自选股信号矩阵表：代码/价格/涨跌/PE/RSI/MACD/Bollinger/Stoch/MA交叉/量/综合
-- 偏多→偏空排序，顶部统计汇总
-
-### 🎯 狩猎
-
-按大盘+领域扫描交易所成分股，四维评分推荐。
-
-| 维度 | 分值 | 评分规则 |
-|------|------|---------|
-| 价值 | 30 | PE<15 +10, PEG<1 +5 |
-| 机构 | 25 | 目标空间>30% +12, 买入评级 +5 |
-| 技术 | 25 | 买入信号+2/个, 卖出-2/个 |
-| 财务 | 20 | 股息+3, 低Beta+2 |
-
-- 数据源：Wikipedia 实时成分股（S&P 500 / CSI 300 / 恒生 / 日经）
-- 结果写入数据库，可回查历史
-
-### 📒 交易记录
-
-- 做多/做空开平仓，开/平时间与价格（可留空）
-- 自动盈亏计算（金额 + 百分比）
-- 统计：总记录/持仓中/已实现/浮盈/胜率
-- 明文存储 `data/trades.json`
-
-### 📈 持仓分析
-
-- 统计：持仓成本 / 总值 / 总浮盈（含%）/ 标的总数
-- 饼图（标的占比 + 领域占比，右侧 legend 带百分比）
-- 收益曲线（日线/小时），基于真实历史价格
-- 持仓明细卡片：代码/股数/成本/现值/涨跌%
-
-### ₿ 加密货币
-
-- 30+ USDT 交易对，四层回退（ccxt Binance→OKX→HTTP Binance→HTTP OKX）
-- 实时价格/K线/技术指标/周期分析/走势图
-- 存储为 `CRYPTO:BTC-USDT` 避免与股票冲突
-
-### 🕐 时刻表
-
-- 北京时间时钟 + 五地股市开闭盘状态
-- 24h 刻度条（每小时 12 根 5 分钟短线）
-- 彩色条带标注开市时段，重叠时分层堆叠
-- 灰色蒙板覆盖已过时间，白色竖线当前时刻
-
----
+| 模块 | 说明 |
+|------|------|
+| 仪表盘 | 自选股实时价格、走势图、D/W/M/Y/5m涨跌、技术信号、盘前盘后、PE/目标/空间 |
+| 个股详情 | 概览/图表/技术指标/机构评级/财报/资讯/AI分析 7 Tab |
+| 技术扫描 | 批量扫描自选股买卖信号矩阵表 |
+| 狩猎 | 按大盘+领域扫描交易所成分股，四维评分推荐低估机会，支持美股/A股/港股/日股/加密货币 |
+| 交易记录 | 做多/做空开平仓记录，盈亏统计、浮盈浮亏 |
+| 持仓分析 | 饼图占比、收益曲线、持仓明细卡片 |
+| 加密货币 | 支持 BTC/ETH 等 30+ 主流币种，Binance+OKX 双源 |
+| 时刻表 | 24h 刻度条，五地股市开闭盘状态，北京时间 |
 
 ## 目录结构
 
 ```
 StockTracing/
-├── run.py
+├── run.py                         # 启动入口
 ├── requirements.txt
-├── README.md / ARCHITECTURE.md / LICENSE
 ├── data/                          # 运行时数据
-│   ├── config.json                # LLM + 代理
-│   ├── watchlist.json             # 自选股
+│   ├── config.json                # LLM + 代理配置
+│   ├── watchlist.json             # 自选股列表
 │   ├── trades.json                # 交易记录
-│   ├── stocktracing.db            # SQLite
-│   └── stock_universe.json        # 狩猎标的库
-├── backend/
-│   ├── main.py                    # FastAPI 入口
-│   ├── config.py                  # 配置 + 重试装饰器
-│   ├── database/models.py         # 5 张表
-│   ├── services/                  # 10 个服务模块
-│   ├── routers/                   # API + 页面路由
-│   └── utils/                     # watchlist + proxy
-├── frontend/templates/            # 7 个页面模板
-└── images/                        # 演示 GIF
+│   ├── stocktracing.db            # SQLite 缓存
+│   ├── stock_universe.json        # 狩猎标的库
+│   └── exchange_stocks.json       # 交易所成分股缓存
+├── backend/                       # 后端
+│   ├── main.py                    # FastAPI 应用入口
+│   ├── config.py                  # 配置加载
+│   ├── database/models.py         # SQLAlchemy 模型
+│   ├── services/                  # 核心服务
+│   │   ├── stock_data.py          # 股价/行情
+│   │   ├── financials.py          # 财报数据
+│   │   ├── analyst.py             # 机构评级
+│   │   ├── technical.py           # 技术指标 + 信号
+│   │   ├── llm_service.py         # AI 分析
+│   │   ├── news_service.py        # 资讯搜索
+│   │   ├── cache_updater.py       # 后台缓存更新
+│   │   ├── hunter.py              # 狩猎评分引擎
+│   │   ├── discovery.py           # 交易所成分股发现
+│   │   ├── crypto.py              # 加密货币数据
+│   │   └── trades.py              # 交易记录管理
+│   ├── routers/                   # API 路由
+│   │   ├── stock.py               # REST API 端点
+│   │   └── pages.py               # 页面路由
+│   └── utils/                     # 工具
+│       ├── watchlist.py           # 自选股管理
+│       └── proxy.py               # 代理设置
+└── frontend/                      # 前端 (Jinja2 + Tailwind CSS)
+    ├── static/                    # 静态资源
+    └── templates/                 # 页面模板
+        ├── base.html              # 基模板
+        ├── index.html             # 仪表盘
+        ├── stock_detail.html      # 个股详情
+        ├── scan.html              # 技术扫描
+        ├── hunt.html              # 狩猎
+        ├── trades.html            # 交易记录
+        └── portfolio.html         # 持仓分析
 ```
-
----
 
 ## 技术栈
 
-| 层 | 技术 |
-|----|------|
-| 后端 | Python / FastAPI / SQLAlchemy / SQLite |
-| 股票数据 | yfinance |
-| 加密货币 | ccxt + Binance/OKX HTTP API |
-| 前端 | Jinja2 + Tailwind CSS CDN + Chart.js |
-| AI | OpenAI 兼容 API |
-| 资讯 | DuckDuckGo |
+- **后端**: Python / FastAPI / SQLAlchemy / SQLite
+- **数据源**: yfinance (Yahoo Finance) + Binance/OKX 公开 API
+- **前端**: Jinja2 模板 + Tailwind CSS CDN + Chart.js
+- **AI**: OpenAI 兼容 API
+- **资讯**: DuckDuckGo 搜索
 
----
-
-## 数据缓存
-
-| 数据 | 存储 | 更新 |
-|------|------|------|
-| 股价/估值 | StockCache (SQLite) | 后台线程 1s 循环 |
-| K线/指标 | AnalysisCache (SQLite) | 10min TTL |
-| AI 分析 | LLMCache (SQLite) | 永久 |
-| Tick 价格 | 内存 dict | 120s TTL |
-| 成分股 | 文件缓存 | 24h |
-
----
-
-## 支持市场
-
-| 市场 | 代码示例 | 成分股 |
-|------|---------|--------|
-| 美股 | AAPL, TSLA | S&P 500 + NASDAQ 100 + Russell 1000 |
-| A股 | 600519.SS | CSI 300 + CSI 500（纯数字自动补后缀） |
-| 港股 | 0700.HK | 恒生 + HSCEI |
-| 日股 | 7203.T | 日经 225 + TOPIX |
-| 加密货币 | BTC, ETH | Binance/OKX 30+ 交易对 |
-
----
+[详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 免责声明
 
 本系统仅供学习与研究目的使用。
 
-- 所有数据来源于第三方公开 API，AI 分析仅供参考，不构成投资建议
-- 本系统未经过安全审计，部署公网需自行承担安全风险
-- 作者不对任何投资损失、安全事件或数据损坏负责
-
----
+- 所有股票数据来源于 Yahoo Finance，AI 分析结论仅供参考，不构成任何投资建议。使用者应独立判断并承担投资风险。
+- 本系统未经过安全审计，部署到公网可能导致服务器被攻击、数据泄露等安全风险。部署者应自行承担由此引发的系统损坏、数据丢失及其他损失。
+- 作者不对因使用或部署本系统产生的任何投资损失、安全事件、系统故障或数据损坏负责。
 
 ## 许可
 
 [MIT License](LICENSE)
-
-[详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
