@@ -170,7 +170,13 @@ function renderPnlCurve(curve, events){
     pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(d=>d.date),datasets},
         options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
             plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1,
-                callbacks:{label:function(ctx){const v=typeof ctx.raw==='object'?ctx.raw.y:ctx.raw;return ctx.dataset.label+': $'+Number(v).toFixed(2);}}}},
+                callbacks:{label:function(ctx){
+                    const v=typeof ctx.raw==='object'?ctx.raw.y:ctx.raw;
+                    const allPts=[...buyPoints,...sellPoints];
+                    const match=allPts.find(p=>p.x===ctx.label&&Math.abs(p.y-Number(v))<0.01);
+                    if(match)return match.label;
+                    return '累计盈亏: $'+Number(v).toFixed(2);
+                }}},
             scales:{x:{ticks:{color:'#4A5466',maxTicksLimit:8,autoSkip:true},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466',callback:v=>'$'+v.toFixed(0)},grid:{color:'#1A2030'}}}}});
 }
 
