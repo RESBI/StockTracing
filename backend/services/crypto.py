@@ -15,16 +15,13 @@ CRYPTO_SYMBOLS = [
 
 
 def _get_client():
+    # Try ccxt with fast timeout
     try:
         import ccxt
-        return ccxt.binance({"enableRateLimit": True, "timeout": 5000})
+        return ccxt.binance({"enableRateLimit": True, "timeout": 3000})
     except Exception:
         pass
-    try:
-        import ccxt
-        return ccxt.okx({"enableRateLimit": True, "timeout": 5000})
-    except Exception:
-        return None
+    return None
 
 
 def _fetch_ticker_binance(sym: str) -> dict | None:
@@ -191,7 +188,7 @@ def get_crypto_history(symbol: str, period: str = "30d") -> list[dict]:
 
     exchange = _get_client()
     if not exchange:
-        return []
+        return _fetch_history_http(sym, period)
 
     try:
         ohlcv = exchange.fetch_ohlcv(sym, tf, limit=limit)
@@ -211,6 +208,32 @@ def get_crypto_history(symbol: str, period: str = "30d") -> list[dict]:
 
 
 @retry_on_rate_limit
+def _fetch_history_http(sym: str, period: str) -> list[dict]:
+    """Fetch OHLCV history via Binance HTTP API."""
+    try:
+        import requests
+        interval = "1d"
+        limit_map = {"1d": 24, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}
+        limit = limit_map.get(period, 180)
+        url = f"https://api.binance.com/api/v3/klines?symbol={sym.replace('-','')}&interval={interval}&limit={limit}"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            records = []
+            for c in resp.json():
+                records.append({
+                    "date": time.strftime("%Y-%m-%d", time.gmtime(c[0] / 1000)),
+                    "open": round(float(c[1]), 4),
+                    "high": round(float(c[2]), 4),
+                    "low": round(float(c[3]), 4),
+                    "close": round(float(c[4]), 4),
+                    "volume": round(float(c[5]), 2),
+                })
+            return records
+    except Exception:
+        pass
+    return []
+
+
 def get_crypto_tick(symbol: str) -> dict | None:
     info = get_crypto_info(symbol)
     if not info:
@@ -263,21 +286,14 @@ def get_crypto_periods(symbol: str) -> dict[str, Any]:
     try:
         import requests
         url = f"https://api.binance.com/api/v3/klines?symbol={sym.replace('-','')}&interval=1d&limit=365"
-        resp = requests.get(url, timeout=8)
+        resp = requests.get(url, timeout=3)
         if resp.status_code == 200:
             closes = [float(r[4]) for r in resp.json()]
     except Exception:
         pass
 
     if not closes:
-        # Try ccxt
-        exchange = _get_client()
-        if exchange:
-            try:
-                ohlcv = exchange.fetch_ohlcv(sym, "1d", limit=365)
-                closes = [c[4] for c in ohlcv]
-            except Exception:
-                pass
+        return {"changes": {}, "signals": {}}
 
     if len(closes) < 20:
         return {"changes": {}, "signals": {}}
