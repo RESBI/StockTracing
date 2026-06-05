@@ -114,32 +114,36 @@ StockTracing/
 ├── backend/
 │   ├── main.py
 │   ├── config.py
-│   ├── database/models.py
-│   ├── routers/pages.py
-│   ├── routers/stock.py
-│   ├── services/stock_data.py
-│   ├── services/financials.py
-│   ├── services/analyst.py
-│   ├── services/technical.py
-│   ├── services/crypto.py
-│   ├── services/llm_service.py
-│   ├── services/news_service.py
-│   ├── services/cache_updater.py
-│   ├── services/discovery.py
-│   ├── services/hunter.py
-│   ├── services/trades.py
-│   ├── services/institutions.py
-│   ├── services/institution_mapper.py
-│   └── services/institution_normalizer.py
-├── frontend/templates/
-│   ├── base.html
-│   ├── index.html
-│   ├── stock_detail.html
-│   ├── scan.html
-│   ├── hunt.html
-│   ├── institutions.html
-│   ├── trades.html
-│   └── portfolio.html
+│   ├── database/
+│   │   └── models.py
+│   ├── routers/
+│   │   ├── pages.py
+│   │   └── stock.py
+│   └── services/
+│       ├── stock_data.py
+│       ├── financials.py
+│       ├── analyst.py
+│       ├── technical.py
+│       ├── crypto.py
+│       ├── llm_service.py
+│       ├── news_service.py
+│       ├── cache_updater.py
+│       ├── discovery.py
+│       ├── hunter.py
+│       ├── trades.py
+│       ├── institutions.py
+│       ├── institution_mapper.py
+│       └── institution_normalizer.py
+├── frontend/
+│   └── templates/
+│       ├── base.html
+│       ├── index.html
+│       ├── stock_detail.html
+│       ├── scan.html
+│       ├── hunt.html
+│       ├── institutions.html
+│       ├── trades.html
+│       └── portfolio.html
 └── data/
     ├── config.json
     ├── watchlist.json
