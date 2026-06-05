@@ -1,10 +1,10 @@
-# StockTracing — 智能股票追踪分析系统
+# StockTracing - 智能股票追踪分析系统
 
-> 本项目由本人使用 [OpenCode](https://github.com/anomalyco/opencode) 基于 DeepSeek V4 Pro 生成。本人仅负责项目大致结构设计与网页画面调整。
+> 本项目由本人使用 [OpenCode](https://github.com/anomalyco/opencode) 基于 DeepSeek V4 Pro 生成，并在后续开发中引入 GPT-5.5 模型参与代码优化与文档维护。本人负责项目大致结构设计与网页画面调整。
 
 ![Demo](images/GIF%2003-06-2026%2018-43-00.gif)
 
-实时追踪股票行情，技术指标计算，AI 分析总结，机构评级整合，交易记录管理，多市场狩猎扫描。
+StockTracing 是一个本地运行的投资研究面板，集成自选股实时追踪、技术指标、AI 分析、机构评级、SEC 13F 机构持仓、交易记录、持仓收益和多市场狩猎扫描。
 
 ## 快速开始
 
@@ -13,11 +13,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
-访问 http://localhost:8000
+访问：`http://localhost:8000`
 
-## LLM 配置
+## 配置
 
-编辑 `data/config.json`：
+编辑 `data/config.json`。
+
+LLM 配置：
 
 ```json
 {
@@ -29,9 +31,7 @@ python run.py
 }
 ```
 
-支持 OpenAI / DeepSeek / Ollama 等兼容 API。
-
-## 代理配置
+代理配置：
 
 ```json
 {
@@ -43,140 +43,127 @@ python run.py
 }
 ```
 
-保存后即时生效，无需重启。
+如果 `https` 为空，系统会复用 `http` 代理。
 
 ## 功能概览
 
-### 1. 仪表盘
+### 仪表盘
 
-侧边栏点击 **仪表盘** 进入。页面顶部为搜索框和自选股管理区。
+- 集中展示自选标的的价格、涨跌、短线变化、周期趋势和综合信号。
+- 支持搜索、添加、删除自选标的。
+- 支持股票和加密货币混合追踪。
+- 提供全屏看板、市场时刻表和盘前/盘后信息。
 
-- **搜索股票**：输入代码（如 `AAPL`、`600519`）回车，点击"查看"可进入详情，点击标签旁 × 可加入自选股。A 股纯数字自动补后缀。
-- **添加自选**：在自选管理栏输入代码点击"添加"，或搜索结果中点击链接进入详情页后添加到自选。
-- **价格横条**：每行显示一只标的的实时信息。价格每秒自动刷新，变化时闪烁+滑入动画。走势图为当日内迷你 K 线。各列依次为：代码/名称 → 价格 → 走势图 → 今日涨跌 → 5m 涨跌 → D/W/M/Y 涨跌+信号 → 综合评级 → PE/目标/空间。
-- **盘前/盘后**：非交易时段（如美股盘前 4:00-9:30 ET），价格下方自动出现盘前/盘后价格和涨跌幅。
-- **全屏模式**：右上角"⛶ 全屏"隐藏侧边栏和工具栏，"◷ 时刻表"控制时间条显隐。
-- **时刻表**：顶部显示北京时间时钟和五地股市状态（绿=开盘，黄=午休，红=闭盘）。下方 24 小时刻度条标注各市场交易时段，灰色蒙板推进，白色竖线显示当前时间。
+### 个股详情
 
-### 2. 个股详情
+- 查看标的概览、行情走势、关键估值指标和综合建议。
+- 支持多周期图表、完整技术指标、机构评级、财报和资讯。
+- 配置 AI 后可生成中文分析总结，并保留历史分析记录。
 
-在仪表盘点击任意股票横条进入，或搜索代码后点击"查看"。
+### 技术扫描
 
-- 页面顶部显示股票名称和实时价格。价格每 30 秒自动刷新。
-- **概览 Tab**（默认）：价格、涨跌、关键指标（市值/PE/EPS/Beta/股息率）、综合建议。
-- **图表 Tab**：K 线走势图，可切换 1 月/3 月/6 月/1 年。技术指标概览（RSI/MACD/Bollinger 快照）。
-- **技术指标 Tab**：显示 SMA/EMA/MACD/RSI/Bollinger/ATR/OBV/Stochastic 的完整计算结果，以及综合买卖信号列表。
-- **机构评级 Tab**：目标价预测（当前价/目标均价/上涨空间/目标高价/目标低价/下行空间）→ 评级调级记录 → 近期评级列表。
-- **财报 Tab**：年度利润表/资产负债表/现金流量表，可展开查看详细科目。
-- **资讯 Tab**：点击"加载资讯"按钮获取最新新闻和研究报告。
-- **AI 分析 Tab**：如果已配置 LLM，自动显示 AI 对当前股票的综合分析（800 字中文）。点击"刷新分析"可重新生成并追加到历史记录列表。
+- 批量分析自选标的的技术状态。
+- 按买入、卖出、中性信号聚合展示扫描结果。
+- 用于快速发现技术面偏强或偏弱的标的。
 
-### 3. 技术扫描
+### 狩猎
 
-侧边栏点击 **技术扫描** 进入。点击"开始扫描"批量分析自选股的技术面。结果以表格展示，每行一只股票，列出 RSI/MACD/Bollinger/Stochastic/MA 交叉/成交量等指标的买卖信号，按偏多→偏空排序。顶部统计买入/卖出/中性数量。
+- 面向不同市场和领域筛选潜在机会。
+- 从价值、机构、技术和财务多个维度给出综合评分。
+- 支持保存和回看历史扫描结果。
 
-### 4. 狩猎
+### 机构持仓
 
-侧边栏点击 **狩猎** 进入。自动加载最近一次扫描结果。
+- 跟踪主要机构的公开持仓变化。
+- 横幅展示机构投资规模、前十资产和领域分布。
+- 展开机构后查看完整持仓明细、持仓金额、权重和增减持趋势。
+- 支持手动刷新、进度展示和历史记录查看。
 
-- 选择大盘（美股/A股/港股/日股）和领域（科技/金融等，或"全部"），点击"开始狩猎"。
-- 系统自动从交易所成分股中拉取标的列表，基于本地缓存的 PE、目标价、技术信号等计算四维评分。
-- 结果按推荐强度排序，每行显示：排名 → 代码 → 价格 → PE/目标/信号 → EPS/股息/Beta/分析师 → 价值/机构/技术/财务评分进度条 → 总分 → 综合标签（推荐/关注/一般）。
-- 点击"历史记录"可回查既往狩猎结果。
+### 交易记录与持仓分析
 
-### 5. 交易记录
+- 记录交易方向、数量、开平仓价格和备注。
+- 自动统计盈亏、胜率和当前持仓状态。
+- 提供持仓占比、领域分布和收益曲线。
 
-侧边栏点击 **交易记录** 进入。点击"添加记录"填写：
+### 加密货币
 
-- **股票代码**、**方向**（做多/做空）、**数量**
-- **开仓时间**、**开仓价**（必填其一）
-- **平仓时间**、**平仓价**（留空 = 持仓中，填写后自动平仓）
-- **备注**（可选）
+- 支持 BTC、ETH、SOL 等主流交易对。
+- 支持实时行情、历史走势、周期涨跌和技术指标。
+- 可以与股票一起加入自选列表统一追踪。
 
-每条记录自动计算盈亏（金额 + 百分比）。顶部统计面板显示总记录/持仓中/已实现盈亏/浮盈/胜率。
+## 数据源
 
-### 6. 持仓分析
-
-侧边栏点击 **持仓分析** 进入。基于交易记录中状态为"open"的持仓自动生成。
-
-- 左侧统计：持仓成本（开仓价×数量总和）| 持仓总值（当前价×数量总和）| 总浮盈（含百分比）| 标的总数
-- 右侧饼图：标的占比 + 领域占比，右侧图例按降序排列，hover 显示百分比。
-- 收益曲线：默认小时线，可切换日线。曲线从第一笔交易的开仓日期开始，基于历史真实收盘价计算每日持仓浮盈。
-- 持仓明细：卡片式列表，每行显示代码/方向 → 股数 → 成本（总成本/单价）→ 现值（总现值/现价）→ 涨跌百分比。
-
-### 7. 加密货币
-
-在仪表盘搜索框输入加密货币代码（如 `BTC`、`ETH`、`SOL`）回车，点击添加到自选。
-
-- 与股票完全相同的方式展示：实时价格、走势图、D/W/M/Y 涨跌、技术指标。
-- 数据源自动从 Binance/OKX 公开 API 获取，无需额外配置。
-- 自选存储格式为 `CRYPTO:BTC-USDT`，不会与同名股票冲突。
-- 配置好代理后可获取实时行情；网络受限时显示基本代码信息。
+| 模块 | 数据源 |
+|---|---|
+| 股票行情 | yfinance / Yahoo Finance |
+| 财报 | yfinance |
+| 机构评级 | yfinance |
+| 加密货币 | ccxt Binance / OKX / Binance HTTP / OKX HTTP |
+| 资讯 | Yahoo Finance / DuckDuckGo |
+| AI 分析 | OpenAI 兼容 API |
+| 机构持仓 | SEC EDGAR 13F |
+| CUSIP 映射 | OpenFIGI / 本地缓存 |
+| ticker directory | SEC company tickers / NASDAQ symbol directory |
 
 ## 目录结构
 
-```
+```text
 StockTracing/
-├── run.py                         # 启动入口
+├── run.py
 ├── requirements.txt
-├── data/                          # 运行时数据
-│   ├── config.json                # LLM + 代理配置
-│   ├── watchlist.json             # 自选股列表
-│   ├── trades.json                # 交易记录
-│   ├── stocktracing.db            # SQLite 缓存
-│   ├── stock_universe.json        # 狩猎标的库
-│   └── exchange_stocks.json       # 交易所成分股缓存
-├── backend/                       # 后端
-│   ├── main.py                    # FastAPI 应用入口
-│   ├── config.py                  # 配置加载
-│   ├── database/models.py         # SQLAlchemy 模型
-│   ├── services/                  # 核心服务
-│   │   ├── stock_data.py          # 股价/行情
-│   │   ├── financials.py          # 财报数据
-│   │   ├── analyst.py             # 机构评级
-│   │   ├── technical.py           # 技术指标 + 信号
-│   │   ├── llm_service.py         # AI 分析
-│   │   ├── news_service.py        # 资讯搜索
-│   │   ├── cache_updater.py       # 后台缓存更新
-│   │   ├── hunter.py              # 狩猎评分引擎
-│   │   ├── discovery.py           # 交易所成分股发现
-│   │   ├── crypto.py              # 加密货币数据
-│   │   └── trades.py              # 交易记录管理
-│   ├── routers/                   # API 路由
-│   │   ├── stock.py               # REST API 端点
-│   │   └── pages.py               # 页面路由
-│   └── utils/                     # 工具
-│       ├── watchlist.py           # 自选股管理
-│       └── proxy.py               # 代理设置
-└── frontend/                      # 前端 (Jinja2 + Tailwind CSS)
-    ├── static/                    # 静态资源
-    └── templates/                 # 页面模板
-        ├── base.html              # 基模板
-        ├── index.html             # 仪表盘
-        ├── stock_detail.html      # 个股详情
-        ├── scan.html              # 技术扫描
-        ├── hunt.html              # 狩猎
-        ├── trades.html            # 交易记录
-        └── portfolio.html         # 持仓分析
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── database/models.py
+│   ├── routers/pages.py
+│   ├── routers/stock.py
+│   ├── services/stock_data.py
+│   ├── services/financials.py
+│   ├── services/analyst.py
+│   ├── services/technical.py
+│   ├── services/crypto.py
+│   ├── services/llm_service.py
+│   ├── services/news_service.py
+│   ├── services/cache_updater.py
+│   ├── services/discovery.py
+│   ├── services/hunter.py
+│   ├── services/trades.py
+│   ├── services/institutions.py
+│   ├── services/institution_mapper.py
+│   └── services/institution_normalizer.py
+├── frontend/templates/
+│   ├── base.html
+│   ├── index.html
+│   ├── stock_detail.html
+│   ├── scan.html
+│   ├── hunt.html
+│   ├── institutions.html
+│   ├── trades.html
+│   └── portfolio.html
+└── data/
+    ├── config.json
+    ├── watchlist.json
+    ├── trades.json
+    ├── stocktracing.db
+    ├── institution_holdings.json
+    ├── institution_visible_cache.json
+    ├── institution_holdings_history/
+    ├── cusip_mapping_cache.json
+    ├── sec_ticker_cache.json
+    ├── sec_ticker_exchange_cache.json
+    ├── nasdaq_directory_cache.json
+    └── ticker_sector_cache.json
 ```
 
-## 技术栈
+## 项目实现
 
-- **后端**: Python / FastAPI / SQLAlchemy / SQLite
-- **数据源**: yfinance (Yahoo Finance) + Binance/OKX 公开 API
-- **前端**: Jinja2 模板 + Tailwind CSS CDN + Chart.js
-- **AI**: OpenAI 兼容 API
-- **资讯**: DuckDuckGo 搜索
+项目采用 FastAPI 单体后端 + Jinja2 模板前端的结构，核心业务逻辑集中在 `backend/services/`，页面和 API 路由分别由 `backend/routers/pages.py` 与 `backend/routers/stock.py` 管理。运行数据主要保存在 `data/`，其中 SQLite 用于行情、分析和历史缓存，JSON 文件用于配置、自选、交易记录和部分专题数据。
 
-[详细架构文档 → ARCHITECTURE.md](ARCHITECTURE.md)
+详细架构、数据流和模块说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 免责声明
 
-本系统仅供学习与研究目的使用。
-
-- 所有股票数据来源于 Yahoo Finance，AI 分析结论仅供参考，不构成任何投资建议。使用者应独立判断并承担投资风险。
-- 本系统未经过安全审计，部署到公网可能导致服务器被攻击、数据泄露等安全风险。部署者应自行承担由此引发的系统损坏、数据丢失及其他损失。
-- 作者不对因使用或部署本系统产生的任何投资损失、安全事件、系统故障或数据损坏负责。
+本系统仅供学习与研究目的使用。所有行情、评级、财报、机构持仓、AI 分析均可能存在延迟、错误或缺失，不构成投资建议。使用者应独立判断并自行承担投资风险。本系统未经过安全审计，不建议直接暴露到公网。
 
 ## 许可
 

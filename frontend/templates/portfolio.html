@@ -72,14 +72,15 @@ async function loadPnlCurve(interval){
 function renderPies(data){
     const colors=['#296BEF','#00B887','#F59E0B','#F54D4D','#805ad5','#3182ce','#38a169','#dd6b20','#e53e3e','#8b5cf6'];
 
-    function makePie(ctx, chartVar, items){
+    function makePie(ctx, chartVar, items, colorFn){
         if(chartVar)chartVar.destroy();
         const sorted=[...items].sort((a,b)=>b.value-a.value);
         const total=sorted.reduce((s,i)=>s+i.value,0);
         const labels=sorted.map(d=>d.name);
         const values=sorted.map(d=>d.value);
         const pcts=sorted.map(d=>(d.value/total*100).toFixed(1)+'%');
-        return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:colors}]},
+        const bg=sorted.map((d,i)=>colorFn?colorFn(d,i):colors[i%colors.length]);
+        return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:bg}]},
             options:{responsive:true,maintainAspectRatio:false,
                 plugins:{
                     legend:{position:'right',labels:{color:'#848E9C',font:{size:12},padding:14,boxWidth:10,usePointStyle:true,
@@ -96,8 +97,8 @@ function renderPies(data){
                     tooltip:{callbacks:{label:ctx=>ctx.label+': '+pcts[ctx.dataIndex]+' ($'+values[ctx.dataIndex].toFixed(2)+')'}}
                 }}});
     }
-    symbolChart=makePie(document.getElementById('symbol-pie').getContext('2d'),symbolChart,data.symbol_pie);
-    sectorChart=makePie(document.getElementById('sector-pie').getContext('2d'),sectorChart,data.sector_pie);
+    symbolChart=makePie(document.getElementById('symbol-pie').getContext('2d'),symbolChart,data.symbol_pie,(d,i)=>colors[i%colors.length]);
+    sectorChart=makePie(document.getElementById('sector-pie').getContext('2d'),sectorChart,data.sector_pie,(d,i)=>sectorColor(d.name,i));
 }
 
 function renderHoldings(holdings){

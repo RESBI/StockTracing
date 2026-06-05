@@ -16,6 +16,7 @@ from backend.services.trades import (
     delete_trade, get_trade_stats, get_portfolio
 )
 from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, get_crypto_periods, CRYPTO_SYMBOLS
+from backend.services.institutions import get_institutions, get_institution, get_institution_history, get_institution_history_detail, warm_institution_mappings
 
 
 def _is_crypto(symbol: str) -> bool:
@@ -115,6 +116,8 @@ def api_technical(symbol: str):
 @router.get("/stock/{symbol}/periods")
 def api_periods(symbol: str):
     try:
+        if _is_crypto(symbol):
+            return get_crypto_periods(_crypto_sym(symbol))
         return get_period_analysis(_resolve_sym(symbol))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -186,7 +189,6 @@ def api_full_analysis(symbol: str, refresh: bool = False):
                 result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
         except Exception:
             result["technical"] = {"latest_price": result["info"].get("current_price"), "signals": []}
-        result["periods"] = {"changes": {}, "signals": {}}
         result["summary"] = {"enabled": False, "summary": ""}
         result["news"] = []
         return result
@@ -391,6 +393,38 @@ def api_portfolio(interval: str = "1d"):
     return get_portfolio(interval=interval)
 
 
+# ---------- Institution Holdings ----------
+@router.get("/institutions")
+def api_institutions(refresh: bool = False):
+    return get_institutions(refresh=refresh)
+
+
+@router.get("/institutions/history")
+def api_institution_history():
+    return {"history": get_institution_history()}
+
+
+@router.get("/institutions/history/{snapshot_id}")
+def api_institution_history_detail(snapshot_id: str):
+    result = get_institution_history_detail(snapshot_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="历史记录不存在")
+    return result
+
+
+@router.post("/institutions/warm-mappings")
+def api_warm_institution_mappings(limit: int = 200):
+    return warm_institution_mappings(limit=limit)
+
+
+@router.get("/institutions/{institution_id}")
+def api_institution_detail(institution_id: str):
+    result = get_institution(institution_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="机构不存在")
+    return result
+
+
 @router.post("/trades")
 def api_create_trade(body: dict):
     return create_trade(body)
@@ -409,4 +443,3 @@ def api_delete_trade(trade_id: str):
     if not delete_trade(trade_id):
         raise HTTPException(status_code=404, detail="交易记录不存在")
     return {"status": "ok"}
-

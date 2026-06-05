@@ -4,6 +4,14 @@ data/watchlist.json
 data/trades.json
 data/news_cache/
 data/exchange_stocks.json
+data/institution_holdings.json
+data/institution_visible_cache.json
+data/institution_holdings_history/
+data/cusip_mapping_cache.json
+data/sec_ticker_cache.json
+data/sec_ticker_exchange_cache.json
+data/nasdaq_directory_cache.json
+data/ticker_sector_cache.json
 __pycache__/
 *.pyc
 .venv/

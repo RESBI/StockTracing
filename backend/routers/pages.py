@@ -36,3 +36,8 @@ def page_trades(request: Request):
 @router.get("/portfolio", response_class=HTMLResponse)
 def page_portfolio(request: Request):
     return templates.TemplateResponse("portfolio.html", {"request": request, "config": {"LLM_ENABLED": get_llm_enabled()}})
+
+
+@router.get("/institutions", response_class=HTMLResponse)
+def page_institutions(request: Request):
+    return templates.TemplateResponse("institutions.html", {"request": request, "config": {"LLM_ENABLED": get_llm_enabled()}})

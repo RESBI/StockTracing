@@ -1,7 +1,7 @@
 import time
 from typing import Any
 
-from backend.config import retry_on_rate_limit
+from backend.config import get_proxy_dict, retry_on_rate_limit
 
 CRYPTO_SYMBOLS = [
     "BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "XRP-USDT",
@@ -17,7 +17,7 @@ CRYPTO_SYMBOLS = [
 def _http_get(url, timeout=3):
     try:
         import requests
-        r = requests.get(url, timeout=timeout)
+        r = requests.get(url, timeout=timeout, proxies=get_proxy_dict())
         if r.status_code == 200:
             return r.json()
     except Exception:
@@ -207,7 +207,7 @@ def get_crypto_periods(symbol: str) -> dict[str, Any]:
     if "-" not in sym:
         sym = sym + "-USDT"
 
-    rows = _fetch_klines(sym, "1d", 365)
+    rows = _fetch_klines(sym, "1d", 500)
     if not rows:
         return {"changes": {}, "signals": {}}
 

@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block nav_institutions %}bg-bg text-text{% endblock %}
+
+{% block content %}
+<div class="p-5 max-w-7xl mx-auto">
+    <div class="flex items-end justify-between gap-3 mb-5">
+        <div>
+            <h1 class="text-2xl font-bold">机构持仓跟踪</h1>
+            <p class="text-sm text-mute mt-1">列出所有机构，横幅展示投资规模、前十资产和领域占比，点击展开全部标的与增减持变化。</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="institution-count" class="text-sm text-mute"></span>
+            <button onclick="showHistory()" class="btn btn-outline">历史记录</button>
+            <button onclick="loadInstitutions(true)" class="btn btn-outline">刷新</button>
+        </div>
+    </div>
+
+    <div id="history-panel" class="card p-4 mb-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-mute">机构持仓历史记录</h3>
+            <button onclick="hideHistory()" class="btn btn-outline btn-xs">关闭</button>
+        </div>
+        <div id="history-list" class="space-y-2 text-sm text-mute">加载中...</div>
+    </div>
+
+    <div id="refresh-progress" class="card p-4 mb-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-mute">更新进度</h3>
+            <span id="refresh-progress-status" class="text-xs text-mute">准备中</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+            <div id="step-request" class="rounded-md bg-bg border border-bord px-3 py-2 text-mute">○ 发送刷新请求</div>
+            <div id="step-sec" class="rounded-md bg-bg border border-bord px-3 py-2 text-mute">○ 拉取 SEC 13F</div>
+            <div id="step-cache" class="rounded-md bg-bg border border-bord px-3 py-2 text-mute">○ 生成冷缓存</div>
+            <div id="step-render" class="rounded-md bg-bg border border-bord px-3 py-2 text-mute">○ 渲染横幅列表</div>
+        </div>
+        <div id="refresh-error" class="hidden mt-3 text-xs text-down bg-down/10 border border-down/30 rounded-md p-3 whitespace-pre-wrap max-h-28 overflow-auto"></div>
+    </div>
+
+    <div id="institution-list" class="space-y-3">
+        <div class="card p-8 text-center text-mute text-sm">加载中...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let institutions=[];
+let sectorCharts={};
+let currentMeta={};
+const refreshSteps=['request','sec','cache','render'];
+
+function fmtMoney(n){
+    if(n==null)return'-';
+    const v=Number(n);
+    if(Math.abs(v)>=1e12)return'$'+(v/1e12).toFixed(2)+'T';
+    if(Math.abs(v)>=1e9)return'$'+(v/1e9).toFixed(2)+'B';
+    if(Math.abs(v)>=1e6)return'$'+(v/1e6).toFixed(2)+'M';
+    return'$'+v.toLocaleString(undefined,{maximumFractionDigits:0});
+}
+
+function fmtShares(n){
+    if(n==null)return'-';
+    const v=Number(n);
+    if(Math.abs(v)>=1e9)return(v/1e9).toFixed(2)+'B';
+    if(Math.abs(v)>=1e6)return(v/1e6).toFixed(2)+'M';
+    if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+'K';
+    return v.toFixed(0);
+}
+
+function assetBars(assets){
+    if(!assets.length)return'<div class="text-xs text-mute">暂无资产</div>';
+    const max=Math.max(...assets.map(a=>a.value),1);
+    const ticks=[1,.75,.5,.25,0];
+    return `<div class="h-40 grid grid-cols-[44px_1fr] grid-rows-[128px_26px] gap-x-2 gap-y-1">
+        <div class="relative h-32 text-[10px] text-mute">
+            ${ticks.map(t=>`<div class="absolute right-0 -translate-y-1/2" style="top:${(1-t)*100}%">${fmtMoney(max*t)}</div>`).join('')}
+        </div>
+        <div class="relative h-32 border-l border-b border-bord overflow-hidden">
+            ${ticks.map(t=>`<div class="absolute left-0 right-0 border-t border-bord/60" style="top:${(1-t)*100}%"></div>`).join('')}
+            <div class="absolute inset-0 flex items-end gap-2 px-2 pb-0">
+                ${assets.map(a=>`
+                    <div class="flex-1 min-w-0 h-full flex flex-col justify-end items-center" title="${a.name} ${fmtMoney(a.value)} ${a.weight.toFixed(1)}%">
+                        <div class="w-full max-w-8 rounded-t-sm bg-acc z-10" style="height:${Math.max(a.value/max*100,5)}%"></div>
+                    </div>`).join('')}
+            </div>
+        </div>
+        <div></div>
+        <div class="flex gap-2 px-2 overflow-visible">
+            ${assets.map(a=>`<div class="flex-1 min-w-0 text-center" title="${a.name} ${fmtMoney(a.value)} ${a.weight.toFixed(1)}%">
+                <a href="/stock/${encodeURIComponent(a.display_symbol||a.symbol)}" onclick="event.stopPropagation()" class="block text-[10px] leading-3 font-semibold text-text hover:text-acc truncate">${a.display_symbol||a.symbol}</a>
+                <span class="block text-[9px] text-mute leading-3">${a.weight.toFixed(0)}%</span>
+            </div>`).join('')}
+        </div>
+    </div>`;
+}
+
+function sectorPie(sectors){
+    if(!sectors.length)return'<div class="text-xs text-mute">暂无领域数据</div>';
+    const legend=sectors.slice(0,6).map((s,i)=>`
+        <span class="flex items-center gap-1 mb-1">
+            <i class="w-2 h-2 rounded-full" style="background:${sectorColor(s.sector,i)}"></i>${s.sector} ${s.weight.toFixed(1)}%
+        </span>`).join('');
+    return `<div class="flex items-center gap-3">
+        <div class="relative w-20 h-20 shrink-0"><canvas class="institution-sector-pie" data-sectors='${JSON.stringify(sectors)}'></canvas></div>
+        <div class="text-xs text-mute leading-5 flex-1 flex flex-col">${legend}</div>
+    </div>`;
+}
+
+function renderSectorCharts(){
+    document.querySelectorAll('.institution-sector-pie').forEach((canvas,idx)=>{
+        const key=canvas.closest('.card')?.dataset.instId||String(idx);
+        const sectors=JSON.parse(canvas.dataset.sectors||'[]');
+        if(sectorCharts[key])sectorCharts[key].destroy();
+        const labels=sectors.map(s=>s.sector);
+        const values=sectors.map(s=>s.value);
+        const total=values.reduce((s,v)=>s+v,0)||1;
+        const pcts=values.map(v=>(v/total*100).toFixed(1)+'%');
+        sectorCharts[key]=new Chart(canvas.getContext('2d'),{
+            type:'doughnut',
+            data:{labels,datasets:[{data:values,backgroundColor:sectors.map((s,i)=>sectorColor(s.sector,i)),borderWidth:0,hoverBorderWidth:0}]},
+            options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{display:false},tooltip:{backgroundColor:'#1A2030',titleColor:'#E8EAED',bodyColor:'#848E9C',borderColor:'#2A3040',borderWidth:1,callbacks:{label:ctx=>ctx.label+': '+pcts[ctx.dataIndex]+' ('+fmtMoney(values[ctx.dataIndex])+')'}}}}
+        });
+    });
+}
+
+function trendTag(h){
+    if(h.trend==='up')return`<span class="tag tag-up">增持 ${fmtMoney(h.change_value)}</span>`;
+    if(h.trend==='down')return`<span class="tag tag-down">减持 ${fmtMoney(Math.abs(h.change_value))}</span>`;
+    return'<span class="tag tag-mute">持平</span>';
+}
+
+function detailTable(inst){
+    return `<div id="detail-${inst.id}" class="hidden border-t border-bord bg-bg/40 px-4 py-3">
+        <div id="detail-body-${inst.id}" class="overflow-x-auto">
+            ${inst.holdings&&inst.holdings.length?detailRows(inst):'<div class="py-6 text-center text-mute text-sm">点击展开后加载详情...</div>'}
+        </div>
+    </div>`;
+}
+
+function detailRows(inst){
+    return `<div class="overflow-x-auto">
+            <table class="w-full min-w-[860px]">
+                <thead><tr>
+                    <th class="w-10">#</th><th>标的</th><th>名称</th><th>领域</th><th class="text-right">持股数</th><th class="text-right">价格</th><th class="text-right">金额</th><th class="text-right">权重</th><th>趋势</th><th class="text-right">股份变化</th>
+                </tr></thead>
+                <tbody>${inst.holdings.map((h,i)=>`
+                    <tr class="border-b border-bord/70 last:border-b-0">
+                        <td class="text-mute">${h.index||i+1}</td>
+                        <td><a href="/stock/${encodeURIComponent(h.display_symbol||h.symbol)}" class="font-semibold text-acc hover:text-text">${h.display_symbol||h.symbol}</a>${h.badge?`<span class="tag tag-warn ml-1">${h.badge}</span>`:''}</td>
+                        <td>${h.display_name||h.name}</td>
+                        <td><span class="tag" style="${sectorTagStyle(h.sector)}">${h.sector}</span></td>
+                        <td class="text-right">${fmtShares(h.shares)}</td>
+                        <td class="text-right">${fmtMoney(h.price)}</td>
+                        <td class="text-right font-semibold">${fmtMoney(h.value)}</td>
+                        <td class="text-right">${h.weight.toFixed(2)}%</td>
+                        <td>${trendTag(h)}</td>
+                        <td class="text-right ${h.trend==='up'?'up':h.trend==='down'?'down':'text-mute'}">${h.change_shares>0?'+':''}${fmtShares(h.change_shares)}</td>
+                    </tr>`).join('')}</tbody>
+            </table>
+    </div>`;
+}
+
+function renderInstitution(inst){
+    return `<div class="card overflow-hidden" data-inst-id="${inst.id}">
+        <button onclick="toggleInstitution('${inst.id}')" class="w-full text-left p-4 hover:bg-bg/40 transition">
+            <div class="grid grid-cols-1 xl:grid-cols-[260px_minmax(360px,1fr)_360px] gap-5 items-center">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-bold">${inst.name}</h2>
+                        <span class="text-mute text-lg" id="chev-${inst.id}">▾</span>
+                    </div>
+                    <p class="text-xs text-mute mt-1">${inst.manager||'未填写管理人'} · ${inst.report_date||'未知报告期'} · ${inst.source||'本地缓存'}</p>
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <div class="bg-bg rounded-md p-2">
+                            <div class="text-xs text-mute">投资规模</div>
+                            <div class="text-xl font-bold text-acc">${fmtMoney(inst.total_value)}</div>
+                        </div>
+                        <div class="bg-bg rounded-md p-2">
+                            <div class="text-xs text-mute">持仓标的</div>
+                            <div class="text-xl font-bold">${inst.holding_count}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-1">
+                    ${assetBars(inst.top_assets)}
+                </div>
+                <div class="pt-1">
+                    ${sectorPie(inst.sectors)}
+                </div>
+            </div>
+        </button>
+        ${detailTable(inst)}
+    </div>`;
+}
+
+function toggleInstitution(id){
+    const el=document.getElementById('detail-'+id);
+    const chev=document.getElementById('chev-'+id);
+    if(!el)return;
+    el.classList.toggle('hidden');
+    if(chev)chev.textContent=el.classList.contains('hidden')?'▾':'▴';
+    if(!el.classList.contains('hidden'))loadInstitutionDetail(id);
+}
+
+async function loadInstitutionDetail(id){
+    const body=document.getElementById('detail-body-'+id);
+    if(!body||body.dataset.loaded==='1')return;
+    body.innerHTML='<div class="py-6 text-center text-mute text-sm">加载持仓明细...</div>';
+    try{
+        const inst=await api('/institutions/'+encodeURIComponent(id));
+        body.innerHTML=detailRows(inst);
+        body.dataset.loaded='1';
+    }catch(e){
+        body.innerHTML='<div class="py-6 text-center text-down text-sm">加载失败：'+e.message+'</div>';
+    }
+}
+
+function renderMeta(){
+    const count=document.getElementById('institution-count');
+    const updated=currentMeta.updated_at?new Date(currentMeta.updated_at).toLocaleString():'未更新';
+    if(count)count.textContent=`共 ${institutions.length} 家机构 · 更新 ${updated}`;
+}
+
+function resetRefreshProgress(){
+    document.getElementById('refresh-progress').classList.remove('hidden');
+    document.getElementById('refresh-error').classList.add('hidden');
+    document.getElementById('refresh-error').textContent='';
+    document.getElementById('refresh-progress-status').textContent='更新中...';
+    refreshSteps.forEach(id=>{
+        const el=document.getElementById('step-'+id);
+        el.className='rounded-md bg-bg border border-bord px-3 py-2 text-mute';
+        el.textContent='○ '+({request:'发送刷新请求',sec:'拉取 SEC 13F',cache:'生成冷缓存',render:'渲染横幅列表'}[id]);
+    });
+}
+
+function markStep(id,state='done'){
+    const el=document.getElementById('step-'+id);
+    if(!el)return;
+    const label={request:'发送刷新请求',sec:'拉取 SEC 13F',cache:'生成冷缓存',render:'渲染横幅列表'}[id];
+    if(state==='done'){
+        el.className='rounded-md bg-up border border-up/40 px-3 py-2 up';
+        el.textContent='✓ '+label;
+    }else if(state==='active'){
+        el.className='rounded-md bg-warn border border-warn/40 px-3 py-2 warn';
+        el.textContent='… '+label;
+    }else if(state==='error'){
+        el.className='rounded-md bg-down border border-down/40 px-3 py-2 down';
+        el.textContent='✕ '+label;
+    }
+}
+
+function showRefreshError(message){
+    const err=document.getElementById('refresh-error');
+    err.classList.remove('hidden');
+    err.textContent=String(message||'更新失败').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').slice(0,1200);
+    document.getElementById('refresh-progress-status').textContent='更新失败';
+}
+
+async function loadInstitutions(refresh=false){
+    const list=document.getElementById('institution-list');
+    const count=document.getElementById('institution-count');
+    if(count)count.textContent='';
+    list.innerHTML='<div class="card p-8 text-center text-mute text-sm">'+(refresh?'正在从 SEC EDGAR 获取最新 13F 数据...':'加载中...')+'</div>';
+    try{
+        if(refresh){resetRefreshProgress();markStep('request','done');markStep('sec','active');}
+        const data=await api('/institutions'+(refresh?'?refresh=true':''));
+        if(refresh){markStep('sec','done');markStep('cache','done');markStep('render','active');}
+        institutions=data.institutions||[];
+        currentMeta=data.metadata||{};
+        if(!institutions.length){
+            list.innerHTML='<div class="card p-8 text-center text-mute text-sm">暂无机构持仓数据，请维护 data/institution_holdings.json</div>';
+            return;
+        }
+        renderMeta();
+        list.innerHTML=institutions.map(renderInstitution).join('');
+        renderSectorCharts();
+        if(refresh){markStep('render','done');document.getElementById('refresh-progress-status').textContent='更新完成';}
+    }catch(e){
+        if(refresh){markStep('sec','error');showRefreshError(e.message);}
+        list.innerHTML='<div class="card p-8 text-center text-down text-sm">加载失败：'+e.message+'</div>';
+    }
+}
+
+async function showHistory(){
+    const panel=document.getElementById('history-panel');
+    const list=document.getElementById('history-list');
+    panel.classList.remove('hidden');
+    list.innerHTML='加载中...';
+    try{
+        const data=await api('/institutions/history');
+        const rows=data.history||[];
+        if(!rows.length){list.innerHTML='暂无历史备份。刷新成功后会自动备份旧数据。';return;}
+        list.innerHTML=rows.map(r=>`
+            <button onclick="loadHistorySnapshot('${r.id}')" class="w-full text-left bg-bg hover:bg-card border border-bord rounded-md px-3 py-2 flex items-center justify-between">
+                <span>${r.file}</span><span>${r.total} 家 · ${r.source}</span>
+            </button>`).join('');
+    }catch(e){list.innerHTML='历史记录加载失败：'+e.message;}
+}
+
+function hideHistory(){document.getElementById('history-panel').classList.add('hidden');}
+
+async function loadHistorySnapshot(id){
+    const list=document.getElementById('institution-list');
+    list.innerHTML='<div class="card p-8 text-center text-mute text-sm">加载历史快照...</div>';
+    try{
+        const data=await api('/institutions/history/'+encodeURIComponent(id));
+        institutions=data.institutions||[];
+        currentMeta=data.metadata||{};
+        renderMeta();
+        list.innerHTML=institutions.map(renderInstitution).join('');
+        renderSectorCharts();
+    }catch(e){list.innerHTML='<div class="card p-8 text-center text-down text-sm">历史快照加载失败：'+e.message+'</div>';}
+}
+
+loadInstitutions();
+</script>
+{% endblock %}

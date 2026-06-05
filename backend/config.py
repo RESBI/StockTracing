@@ -60,6 +60,8 @@ def get_proxy_dict() -> dict[str, str] | None:
         proxies["http"] = pc["http"]
     if pc.get("https"):
         proxies["https"] = pc["https"]
+    elif pc.get("http"):
+        proxies["https"] = pc["http"]
     return proxies if proxies else None
 
 DATABASE_URL = f"sqlite:///{DATA_DIR / 'stocktracing.db'}"

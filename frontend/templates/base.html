@@ -142,6 +142,9 @@
             <a href="/hunt" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_hunt %}text-mute hover:text-text{% endblock %}">
                 <span class="text-base sidebar-icon">🎯</span><span class="sidebar-label">狩猎</span>
             </a>
+            <a href="/institutions" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_institutions %}text-mute hover:text-text{% endblock %}">
+                <span class="text-base sidebar-icon">🏦</span><span class="sidebar-label">机构持仓</span>
+            </a>
             <a href="/trades" class="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm {% block nav_trades %}text-mute hover:text-text{% endblock %}">
                 <span class="text-base sidebar-icon">📒</span><span class="sidebar-label">交易记录</span>
             </a>
@@ -178,6 +181,26 @@
         function isCrypto(info){return info&&(info.sector==='加密货币'||info.industry==='数字货币');}
         function tagCls(signal){return signal==='buy'?'tag-up':signal==='sell'?'tag-down':'tag-warn';}
         function signalLabel(signal){return signal==='buy'?'买入':signal==='sell'?'卖出':'中性';}
+        const SECTOR_COLOR_MAP={
+            '科技':'#2F80ED','Technology':'#2F80ED','信息技术':'#2F80ED','软件':'#2F80ED','半导体':'#2F80ED',
+            '金融':'#F2994A','Financial Services':'#F2994A','Financial':'#F2994A','银行':'#F2994A','保险':'#F2994A',
+            '通信服务':'#9B51E0','Communication Services':'#9B51E0','通讯服务':'#9B51E0','媒体':'#9B51E0',
+            '可选消费':'#EB5757','Consumer Cyclical':'#EB5757','Consumer Discretionary':'#EB5757','消费周期':'#EB5757',
+            '消费防御':'#27AE60','Consumer Defensive':'#27AE60','Consumer Staples':'#27AE60','必需消费':'#27AE60',
+            '医疗保健':'#00B8D9','Healthcare':'#00B8D9','Health Care':'#00B8D9','医药':'#00B8D9',
+            '能源':'#F2C94C','Energy':'#F2C94C','石油天然气':'#F2C94C',
+            '工业':'#56CCF2','Industrials':'#56CCF2','Industrial':'#56CCF2',
+            '基础材料':'#A3E635','Basic Materials':'#A3E635','Materials':'#A3E635','材料':'#A3E635',
+            '房地产':'#FF7AB6','Real Estate':'#FF7AB6',
+            '公用事业':'#00C2A8','Utilities':'#00C2A8',
+            'ETF':'#7C3AED','基金':'#7C3AED',
+            '商品':'#D97706','Commodities':'#D97706','贵金属':'#D97706',
+            '加密货币':'#F7931A','数字货币':'#F7931A','Crypto':'#F7931A','Cryptocurrency':'#F7931A',
+            '未分类':'#64748B','Unknown':'#64748B','其他':'#64748B'
+        };
+        const SECTOR_FALLBACK_COLORS=['#2F80ED','#F2994A','#9B51E0','#EB5757','#27AE60','#00B8D9','#F2C94C','#56CCF2','#A3E635','#FF7AB6','#00C2A8','#7C3AED','#D97706','#F7931A','#64748B'];
+        function sectorColor(sector,index=0){return SECTOR_COLOR_MAP[sector]||SECTOR_FALLBACK_COLORS[index%SECTOR_FALLBACK_COLORS.length];}
+        function sectorTagStyle(sector,index=0){const c=sectorColor(sector,index);return `color:${c};background:${c}1F;border:1px solid ${c}66`;}
         function toggleSidebar(){
             const sb=document.getElementById('sidebar');
             const btn=document.getElementById('sidebar-toggle');
