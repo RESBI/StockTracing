@@ -41,7 +41,7 @@ flowchart TD
     Db[初始化 SQLite 表]
     Proxy[初始化代理配置]
     CacheThread[启动 CacheUpdater 后台线程]
-    Static[挂载 frontend/static]
+    Static["挂载 frontend/static"]
     ApiRouter[注册 API 路由]
     PageRouter[注册页面路由]
     Uvicorn[Uvicorn 服务]
@@ -61,7 +61,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     Page[stock_detail.html]
-    FullApi[/api/stock/{symbol}/full]
+    FullApi["/api/stock/{symbol}/full"]
     Router[backend.routers.stock]
     Stock[stock_data.py]
     Technical[technical.py]
@@ -71,8 +71,8 @@ flowchart TD
     Llm[llm_service.py]
     Crypto[crypto.py]
     Db[(stocktracing.db)]
-    NewsCache[(data/news_cache)]
-    External[外部行情/新闻/LLM]
+    NewsCache["data/news_cache"]
+    External["外部行情/新闻/LLM"]
 
     Page --> FullApi
     FullApi --> Router
@@ -110,7 +110,7 @@ flowchart TD
     Normalizer[institution_normalizer.py]
     RawJson[(institution_holdings.json)]
     VisibleJson[(institution_visible_cache.json)]
-    History[(institution_holdings_history/)]
+    History["institution_holdings_history/"]
 
     Trigger --> BackupRaw
     BackupRaw --> BackupVisible
