@@ -400,11 +400,12 @@ function renderAI(summary){
     }
     const ai=aiSignal(summary);
     const cached=summary.cached?'<span class="tag tag-mute ml-2">缓存</span>':'';
+    const truncated=summary.truncated?'<div class="mb-3 text-xs text-warn bg-warn/10 border border-warn/30 rounded-md p-2">AI 输出可能因长度限制被截断，请点击“刷新分析”重新生成。</div>':'';
     const text=(summary.summary||'').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong style="color:#93C5FD">$1</strong>');
     cont.innerHTML=`<div class="bg-bg border border-bord rounded-lg p-3 mb-4 flex items-center justify-between">
         <div><p class="text-xs text-mute mb-1">AI 推荐</p><p class="text-lg font-bold" style="color:${ai.color}">${ai.label}</p></div>
         <span>${cached}</span>
-    </div><div class="prose-sm" style="color:#CBD5E1">${text}</div>`;
+    </div>${truncated}<div class="prose-sm" style="color:#CBD5E1">${text}</div>`;
 }
 
 async function refreshAI(){

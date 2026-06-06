@@ -129,11 +129,18 @@ def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.7,
-            max_tokens=1200,
+            max_tokens=2400,
         )
-        summary = response.choices[0].message.content or ""
+        choice = response.choices[0]
+        summary = choice.message.content or ""
         _cache_result(symbol, prompt_hash, summary)
-        return {"enabled": True, "summary": summary, "cached": False, "recommendation": _extract_recommendation(summary)}
+        return {
+            "enabled": True,
+            "summary": summary,
+            "cached": False,
+            "recommendation": _extract_recommendation(summary),
+            "truncated": getattr(choice, "finish_reason", "") == "length",
+        }
     except Exception as e:
         return {"enabled": True, "summary": f"LLM分析出错: {str(e)}", "cached": False}
 
