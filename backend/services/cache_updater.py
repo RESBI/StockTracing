@@ -98,12 +98,16 @@ class CacheUpdater:
         post_change_pct = info.get("postMarketChangePercent")
         market_state = info.get("marketState", "")
 
-        # Keep only the active extended-hours side. Otherwise stale post-market
-        # values can remain visible during the next pre-market session.
+        # Keep only the active extended-hours side. Prefer explicit Yahoo
+        # marketState, but fall back to which extended price is currently present.
         existing = self._ticks.get(sym, {})
         in_regular = market_state == "REGULAR"
-        in_pre = market_state == "PRE"
-        in_post = market_state == "POST"
+        in_pre = market_state == "PRE" or (market_state != "POST" and pre_price is not None)
+        in_post = market_state == "POST" or (market_state != "PRE" and post_price is not None)
+        if in_pre:
+            in_post = False
+        elif in_post:
+            in_pre = False
         self._ticks[sym] = {
             "price": price if price is not None else existing.get("price"),
             "ts": time.time(),
