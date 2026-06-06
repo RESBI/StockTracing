@@ -30,6 +30,16 @@
         <div class="labels" id="timeline-labels"></div>
     </div>
 
+    <div id="major-index-panel" class="card p-3 mb-4 dash-tools">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold text-sm uppercase tracking-wide text-mute">主要股指</h2>
+            <button id="idx-btn" onclick="toggleIndexes()" class="btn btn-outline btn-xs text-mute">收起</button>
+        </div>
+        <div id="major-index-list" class="flex gap-2 overflow-x-auto pb-1">
+            <span class="text-xs text-mute">加载中...</span>
+        </div>
+    </div>
+
     <p class="text-sm text-mute mb-6">追踪你的自选股票，查看实时估值与技术信号</p>
 
     <!-- Search Bar -->
@@ -46,10 +56,6 @@
     <div class="card p-4 mb-6 dash-tools">
         <div class="flex items-center justify-between mb-3">
             <h2 class="font-semibold text-sm uppercase tracking-wide text-mute">自选股</h2>
-            <div class="flex gap-2">
-                <input id="add-symbol" type="text" placeholder="添加代码" class="input py-1.5 text-xs w-28" autocomplete="off">
-                <button onclick="addOne()" class="btn btn-acc btn-sm">+ 添加</button>
-            </div>
         </div>
         <div id="watchlist-tags" class="flex flex-wrap gap-1.5"></div>
     </div>
@@ -81,6 +87,15 @@
 <script>
 let priceMap={};
 let autoRefreshTimer=null;
+const majorIndexes=[
+    {symbol:'^GSPC',name:'S&P 500'},
+    {symbol:'^IXIC',name:'NASDAQ'},
+    {symbol:'^DJI',name:'Dow'},
+    {symbol:'000300.SS',name:'沪深300'},
+    {symbol:'^HSI',name:'恒生'},
+    {symbol:'^N225',name:'日经225'},
+    {symbol:'^STOXX50E',name:'欧股50'}
+];
 
 function diffPrice(oldS,newS){
     if(!oldS||oldS===newS)return{prefix:newS,changed:'',suffix:''};
@@ -139,9 +154,13 @@ async function doSearch(){
         const r=document.getElementById('search-results');
         r.classList.remove('hidden');
         const isC=info.sector==='加密货币';
+        const sym=info.symbol||q.toUpperCase();
         r.innerHTML=`<div class="flex items-center justify-between bg-bg rounded-lg p-3">
-            <div><span class="font-semibold">${isC?info.symbol:info.symbol}</span> <span class="text-mute text-xs ml-2">${info.name||''}</span></div>
-            <a href="/stock/${info.symbol||q.toUpperCase()}" class="btn btn-acc btn-sm">查看</a></div>`;
+            <div class="flex items-center gap-2 min-w-0">
+                <button onclick="event.stopPropagation();addSymbol('${sym.replace(/'/g,"\\'")}')" class="btn btn-acc btn-xs shrink-0">+ 自选</button>
+                <div class="min-w-0"><span class="font-semibold">${sym}</span> <span class="text-mute text-xs ml-2">${info.name||''}</span></div>
+            </div>
+            <a href="/stock/${sym}" class="btn btn-outline btn-sm">查看</a></div>`;
     }catch(e){
         const r=document.getElementById('search-results');
         r.classList.remove('hidden');
@@ -350,9 +369,8 @@ async function refreshPrices(){
     }
 }
 
-async function addOne(){
-    const inp=document.getElementById('add-symbol');const sym=inp.value.trim();if(!sym)return;
-    inp.value='';
+async function addSymbol(sym){
+    if(!sym)return;
     try{await fetch('/api/watchlist/'+encodeURIComponent(sym),{method:'POST'});loadDashboard();startAutoRefresh();}
     catch(e){alert('添加失败: '+e.message);}
 }
@@ -377,8 +395,38 @@ function toggleTimeline(){
     document.getElementById('tl-btn').textContent=hidden?'◷ 时刻表':'◴ 时刻表';
     try{localStorage.setItem('tl-hidden',hidden?'1':'0');}catch(e){}
 }
+
+function toggleIndexes(){
+    const list=document.getElementById('major-index-list');
+    const hidden=list.classList.toggle('hidden');
+    document.getElementById('idx-btn').textContent=hidden?'展开':'收起';
+    try{localStorage.setItem('idx-hidden',hidden?'1':'0');}catch(e){}
+}
+
+function indexCard(idx,t){
+    const price=t&&t.price!=null?Number(t.price).toLocaleString(undefined,{maximumFractionDigits:2}):'—';
+    const prev=t&&(t.prev_close||t.previous_close);
+    const chg=t&&t.price!=null&&prev?((t.price-prev)/prev*100):null;
+    const cls=chg==null?'text-mute':chg>=0?'up':'down';
+    const txt=chg==null?'—':(chg>=0?'+':'')+chg.toFixed(2)+'%';
+    return `<a href="/stock/${encodeURIComponent(idx.symbol)}" class="shrink-0 bg-bg border border-bord rounded-md px-3 py-2 min-w-[138px] hover:border-acc/40 transition">
+        <div class="text-xs text-mute">${idx.name}</div>
+        <div class="font-semibold text-sm mt-0.5">${price}</div>
+        <div class="text-xs ${cls}">${txt}</div>
+    </a>`;
+}
+
+async function loadMajorIndexes(){
+    const list=document.getElementById('major-index-list');
+    const rows=await Promise.all(majorIndexes.map(async idx=>{
+        try{return{idx,t:await api('/stock/'+encodeURIComponent(idx.symbol)+'/tick')};}
+        catch(e){return{idx,t:null};}
+    }));
+    list.innerHTML=rows.map(x=>indexCard(x.idx,x.t)).join('');
+}
 (function(){
     try{if(localStorage.getItem('tl-hidden')==='1')toggleTimeline();}catch(e){}
+    try{if(localStorage.getItem('idx-hidden')==='1')toggleIndexes();}catch(e){}
 })();
 
 // -------- Market clock ----------
@@ -536,7 +584,8 @@ function updateMarketBar(){
 updateMarketBar();
 setInterval(updateMarketBar,1000);
 
-document.getElementById('add-symbol').addEventListener('keydown',e=>{if(e.key==='Enter')addOne();});
+loadMajorIndexes();
+setInterval(loadMajorIndexes,60000);
 loadDashboard();
 startAutoRefresh();
 </script>
