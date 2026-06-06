@@ -30,8 +30,22 @@ def _get_client():
 
 
 def _hash_prompt(symbol: str, context: dict) -> str:
-    raw = json.dumps({"symbol": symbol, "context": context}, sort_keys=True, ensure_ascii=False)
+    raw = json.dumps({"symbol": symbol, "context": context}, sort_keys=True, ensure_ascii=False, default=_json_default)
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    try:
+        import pandas as pd
+        if value is pd.NaT:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+    except Exception:
+        pass
+    return str(value)
 
 
 def _get_cached(symbol: str, prompt_hash: str) -> str | None:
@@ -89,7 +103,7 @@ def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
     if client is None:
         return {"enabled": False, "summary": "LLM客户端初始化失败。请检查 openai 包是否安装。"}
 
-    context_str = json.dumps(context, ensure_ascii=False, indent=2)
+    context_str = json.dumps(context, ensure_ascii=False, indent=2, default=_json_default)
     prompt = f"""你是一位严谨、风险优先的股票分析师。请根据以下数据对 {symbol} 进行全面分析总结。
 
 数据：

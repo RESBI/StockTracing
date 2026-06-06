@@ -76,15 +76,15 @@ def build_ai_context(info: dict, analyst: dict, tech: dict, periods: dict, finan
     }
 
 
-def build_stock_ai_context(symbol: str) -> dict[str, Any]:
+def build_stock_ai_context(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
     sym = symbol.upper().strip()
-    info = get_stock_info(sym)
+    info = get_stock_info(sym, force_refresh=force_refresh)
     try:
         analyst = get_analyst_info(sym)
     except Exception:
         analyst = {}
     try:
-        financials = get_financials(sym)
+        financials = get_financials(sym, force_refresh=force_refresh)
     except Exception:
         financials = {}
     try:
@@ -92,7 +92,7 @@ def build_stock_ai_context(symbol: str) -> dict[str, Any]:
     except Exception:
         periods = {}
     try:
-        news = get_stock_news(sym)
+        news = get_stock_news(sym, force_refresh=force_refresh)
     except Exception:
         news = []
     try:

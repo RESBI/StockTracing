@@ -13,7 +13,7 @@ def _get_cache_path(symbol: str) -> str:
     return str(NEWS_CACHE_DIR / f"{symbol.upper()}.json")
 
 
-def _read_cache(symbol: str) -> list[dict] | None:
+def _read_cache(symbol: str, ignore_ttl: bool = False) -> list[dict] | None:
     path = _get_cache_path(symbol)
     if not __import__("os").path.exists(path):
         return None
@@ -22,7 +22,7 @@ def _read_cache(symbol: str) -> list[dict] | None:
             data = json.loads(f.read())
         ts = data.get("_ts", 0)
         age = datetime.now(timezone.utc).timestamp() - ts
-        if age < NEWS_CACHE_TTL:
+        if ignore_ttl or age < NEWS_CACHE_TTL:
             return data.get("items", [])
     except Exception:
         pass
@@ -63,7 +63,7 @@ def get_stock_news(symbol: str, force_refresh: bool = False) -> list[dict]:
     sym = symbol.upper().strip()
 
     if not force_refresh:
-        cached = _read_cache(sym)
+        cached = _read_cache(sym, ignore_ttl=True)
         if cached is not None:
             return cached
 
@@ -112,6 +112,10 @@ def get_stock_news(symbol: str, force_refresh: bool = False) -> list[dict]:
 
     _write_cache(sym, results)
     return results
+
+
+def get_cached_stock_news(symbol: str) -> list[dict]:
+    return _read_cache(symbol.upper().strip(), ignore_ttl=True) or []
 
 
 def search_stock_insights(symbol: str) -> dict[str, Any]:

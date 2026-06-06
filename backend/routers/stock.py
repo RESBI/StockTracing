@@ -8,7 +8,7 @@ from backend.services.analyst import get_analyst_info
 from backend.services.technical import calculate_all_indicators, get_period_analysis
 from backend.services.ai_context import build_stock_ai_context
 from backend.services.llm_service import generate_summary, get_latest_summary
-from backend.services.news_service import get_stock_news, search_stock_insights
+from backend.services.news_service import get_cached_stock_news, get_stock_news, search_stock_insights
 from backend.services.hunter import hunt, get_markets, get_sectors
 from backend.services.discovery import discover_all_stocks
 from backend.services.cache_updater import get_updater
@@ -126,6 +126,8 @@ def api_periods(symbol: str):
 
 @router.get("/stock/{symbol}/news")
 def api_news(symbol: str, refresh: bool = False):
+    if not refresh:
+        return get_cached_stock_news(_resolve_sym(symbol))
     return get_stock_news(_resolve_sym(symbol), force_refresh=refresh)
 
 
@@ -135,10 +137,10 @@ def api_insights(symbol: str):
 
 
 @router.get("/stock/{symbol}/summary")
-def api_summary(symbol: str):
+def api_summary(symbol: str, refresh: bool = True):
     try:
         sym = _resolve_sym(symbol)
-        context = build_stock_ai_context(sym)
+        context = build_stock_ai_context(sym, force_refresh=refresh)
         return generate_summary(sym, context)
     except Exception as e:
         return {"enabled": False, "summary": f"数据获取失败: {str(e)}"}

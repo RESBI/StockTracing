@@ -81,9 +81,9 @@
             <div class="card p-4">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-semibold text-sm text-mute uppercase tracking-wide">最新资讯 & 研究报告</h3>
-                    <button id="news-load-btn" class="btn btn-acc btn-sm" onclick="loadNews()">加载资讯</button>
+                    <button id="news-load-btn" class="btn btn-acc btn-sm" onclick="loadNews(true)">更新资讯</button>
                 </div>
-                <div id="news-status" class="text-center py-6 text-mute text-sm">点击"加载资讯"获取最新新闻</div>
+                <div id="news-status" class="text-center py-6 text-mute text-sm">正在读取上次资讯...</div>
                 <div id="news-list" class="space-y-3 hidden"></div>
             </div>
         </div>
@@ -176,6 +176,7 @@ function renderAll(){
     renderAnalyst(allData.analyst||{},info);
     renderFinancials(allData.financials||{});
     renderAI(allData.summary||{});
+    loadNews(false);
     newsLoaded=false;
     aiHistoryLoaded=false;
 }
@@ -348,38 +349,47 @@ function renderFinancials(fin){
     cont.innerHTML=html||'<div class="card p-4"><p class="text-mute text-sm">暂无财报数据</p></div>';
 }
 
-async function loadNews(){
-    const btn=document.getElementById('news-load-btn');
+function renderNewsList(news){
     const status=document.getElementById('news-status');
     const list=document.getElementById('news-list');
+    if(!news||!news.length){
+        status.innerHTML='<span class="text-mute">暂无上次资讯，点击"更新资讯"获取最新新闻</span>';
+        status.classList.remove('hidden');
+        list.classList.add('hidden');
+        return;
+    }
+    status.classList.add('hidden');
+    list.classList.remove('hidden');
+    list.innerHTML=news.map(n=>`
+        <a href="${n.url||'#'}" target="_blank" rel="noopener" class="block bg-bg border border-bord rounded-lg p-3 hover:border-acc/30 transition-colors">
+            <p class="font-medium text-sm mb-1">${n.title||'无标题'}</p>
+            <p class="text-xs text-mute line-clamp-2 mb-1.5">${n.snippet||''}</p>
+            <div class="flex items-center gap-3 text-xs text-mute">
+                ${n.source?`<span>${n.source}</span>`:''}
+                ${n.date?`<span>${n.date}</span>`:''}
+            </div>
+        </a>`).join('');
+    newsLoaded=true;
+}
+
+async function loadNews(refresh=false){
+    const btn=document.getElementById('news-load-btn');
+    const status=document.getElementById('news-status');
     btn.disabled=true;
-    btn.textContent='加载中...';
+    btn.textContent=refresh?'更新中...':'读取中...';
     status.classList.remove('hidden');
-    status.innerHTML='<div class="spinner mx-auto mb-2"></div><span>正在搜索最新资讯...</span>';
+    status.innerHTML='<div class="spinner mx-auto mb-2"></div><span>'+(refresh?'正在搜索最新资讯...':'正在读取上次资讯...')+'</span>';
     try{
-        const news=await api('/stock/'+SYMBOL+'/news?refresh=true');
-        if(!news||!news.length){
-            status.innerHTML='<span class="text-mute">未找到相关资讯</span>';
-            list.classList.add('hidden');
-        }else{
-            status.classList.add('hidden');
-            list.classList.remove('hidden');
-            list.innerHTML=news.map(n=>`
-                <a href="${n.url||'#'}" target="_blank" rel="noopener" class="block bg-bg border border-bord rounded-lg p-3 hover:border-acc/30 transition-colors">
-                    <p class="font-medium text-sm mb-1">${n.title||'无标题'}</p>
-                    <p class="text-xs text-mute line-clamp-2 mb-1.5">${n.snippet||''}</p>
-                    <div class="flex items-center gap-3 text-xs text-mute">
-                        ${n.source?`<span>${n.source}</span>`:''}
-                        ${n.date?`<span>${n.date}</span>`:''}
-                    </div>
-                </a>`).join('');
-            newsLoaded=true;
-        }
+        const news=await api('/stock/'+SYMBOL+'/news'+(refresh?'?refresh=true':''));
+        renderNewsList(news);
+        return news;
     }catch(e){
         status.innerHTML=`<span class="text-down">加载失败: ${e.message}</span>`;
+        return [];
+    }finally{
+        btn.disabled=false;
+        btn.textContent='更新资讯';
     }
-    btn.disabled=false;
-    btn.textContent='加载资讯';
 }
 
 function renderAI(summary){
@@ -400,9 +410,19 @@ function renderAI(summary){
 async function refreshAI(){
     const btn=document.getElementById('ai-refresh-btn');
     btn.disabled=true;
-    btn.textContent='分析中...';
+    btn.textContent='刷新资料...';
     try{
-        const s=await api('/stock/'+SYMBOL+'/summary');
+        const fresh=await api('/stock/'+SYMBOL+'/full?refresh=true');
+        allData={...fresh,summary:allData.summary};
+        renderOverview(allData.info||{},allData.analyst||{},allData.technical||{},allData.summary||{});
+        renderSignals(allData.technical);
+        renderIndicatorsDetail(allData.technical);
+        renderAnalyst(allData.analyst||{},allData.info||{});
+        renderFinancials(allData.financials||{});
+        btn.textContent='更新资讯...';
+        await loadNews(true);
+        btn.textContent='分析中...';
+        const s=await api('/stock/'+SYMBOL+'/summary?refresh=true');
         allData.summary=s;
         renderAI(s);
         renderOverview(allData.info||{},allData.analyst||{},allData.technical||{},s);
