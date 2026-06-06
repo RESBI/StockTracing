@@ -27,7 +27,7 @@
 <script>
 async function runScan(){
     const cont=document.getElementById('scan-results');
-    cont.innerHTML='<div class="text-center py-8"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">正在扫描...</p></div>';
+    cont.innerHTML='<div class="text-center py-8"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">正在扫描并刷新 AI 分析...</p></div>';
 
     let syms=[];
     try{syms=(await api('/watchlist')).symbols;}catch(e){cont.innerHTML='<p class="text-down text-sm">获取自选列表失败</p>';return;}
@@ -39,7 +39,9 @@ async function runScan(){
             const info=await api('/stock/'+sym);
             const tech=await api('/stock/'+sym+'/technical');
             const analyst=await api('/stock/'+sym+'/analyst');
-            results.push({sym,info,tech,analyst,ok:true});
+            let ai={recommendation:null,summary:''};
+            try{ai=await api('/stock/'+sym+'/summary?refresh=true');}catch(e){ai={recommendation:null,error:e.message};}
+            results.push({sym,info,tech,analyst,ai,ok:true});
         }catch(e){results.push({sym,ok:false,err:e.message});}
     }
 
@@ -65,11 +67,11 @@ async function runScan(){
         </div>`;
 
     // Table
-    const header='<thead><tr>'+['代码','价格','涨跌','PE','RSI','MACD','布林带','Stoch','MA交叉','量','综合'].map(h=>`<th>${h}</th>`).join('')+'</thead>';
+    const header='<thead><tr>'+['代码','价格','涨跌','PE','RSI','MACD','布林带','Stoch','MA交叉','量','综合','AI'].map(h=>`<th>${h}</th>`).join('')+'</thead>';
     let body='';
     results.forEach(r=>{
-        if(!r.ok){body+=`<tr><td><span class="text-down text-sm">${r.sym}</span></td><td colspan="10" class="text-mute text-xs">${r.err}</td></tr>`;return;}
-        const{sym,info,tech,analyst}=r;
+        if(!r.ok){body+=`<tr><td><span class="text-down text-sm">${r.sym}</span></td><td colspan="11" class="text-mute text-xs">${r.err}</td></tr>`;return;}
+        const{sym,info,tech,analyst,ai}=r;
         const chg=fmtChg(info.current_price,info.previous_close);
         const sigs=tech.signals||[];
         function scell(name){
@@ -80,13 +82,14 @@ async function runScan(){
         }
         const comp=sigs.find(x=>x.indicator==='综合评分');
         const compTag=comp?`<span class="tag ${tagCls(comp.signal)}">${signalLabel(comp.signal)}</span>`:'<span class="text-mute">—</span>';
+        const aiTag=ai.recommendation==='买入'?'<span class="tag tag-up">买入</span>':ai.recommendation==='卖出'?'<span class="tag tag-down">卖出</span>':ai.recommendation==='观望'?'<span class="tag tag-warn">观望</span>':'<span class="tag tag-mute">—</span>';
         body+=`<tr class="cursor-pointer hover:bg-bg/50" onclick="location.href='/stock/${sym}'">
             <td><span class="font-medium text-sm" style="color:#296BEF">${sym}</span></td>
             <td class="font-medium">${fmtPrice(info.current_price)}</td>
             <td><span class="${chg.up?'up':'down'} text-sm">${chg.v}</span></td>
             <td><span class="text-sm">${info.pe_ratio?.toFixed(1)||'—'}</span></td>
             ${scell('RSI')}${scell('MACD')}${scell('Bollinger')}${scell('Stochastic')}${scell('MA Cross')}${scell('Volume')}
-            <td>${compTag}</td></tr>`;
+            <td>${compTag}</td><td>${aiTag}</td></tr>`;
     });
     cont.innerHTML=`<div class="overflow-x-auto"><table class="w-full">${header}<tbody>${body}</tbody></table></div>`;
 }
