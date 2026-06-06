@@ -551,8 +551,6 @@ function updateMarketBar(){
     const now=new Date();
     const bjt=new Date(now.getTime()+8*3600000);
     const h=bjt.getUTCHours(),m=bjt.getUTCMinutes(),s=bjt.getUTCSeconds();
-    const dow=bjt.getUTCDay();
-    const isWeekday=dow>=1&&dow<=5;
     const totalMin=(h*60+m);
     const pct=(totalMin/1440*100).toFixed(3);
 
@@ -563,22 +561,40 @@ function updateMarketBar(){
     document.getElementById('timeline-mask').style.width=pct+'%';
     document.getElementById('timeline-now').style.left=pct+'%';
 
-    function setMkt(id, segments){
+    function localParts(tz){
+        const parts=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(now);
+        const get=t=>parts.find(p=>p.type===t)?.value||'';
+        return{day:get('weekday'),min:Number(get('hour'))*60+Number(get('minute'))};
+    }
+    function statusByLocal(tz, segments){
+        const p=localParts(tz);
+        if(['Sat','Sun'].includes(p.day))return'market-closed';
+        for(const[s,e,t]of segments){
+            if(p.min>=s&&p.min<e)return t;
+        }
+        return'market-closed';
+    }
+    function setMkt(id, cls){
+        const el=document.getElementById(id);
+        el.className='market-dot '+cls;
+    }
+    function setMktBjt(id, segments){
+        const dow=bjt.getUTCDay();
+        const isWeekday=dow>=1&&dow<=5;
         let cls='market-closed';
         if(isWeekday){
             for(const[s,e,t]of segments){
                 if(totalMin>=s&&totalMin<e){cls=t;break;}
             }
         }
-        const el=document.getElementById(id);
-        el.className='market-dot '+cls;
+        setMkt(id,cls);
     }
 
-    setMkt('mkt-cn',[[570,690,'market-open'],[780,900,'market-open'],[690,780,'market-lunch']]);
-    setMkt('mkt-hk',[[570,720,'market-open'],[780,960,'market-open'],[720,780,'market-lunch']]);
-    setMkt('mkt-jp',[[480,630,'market-open'],[690,840,'market-open'],[630,690,'market-lunch']]);
-    setMkt('mkt-eu',[[960,1410,'market-open']]);
-    setMkt('mkt-us',[[1290,1440,'market-open'],[0,240,'market-open']]);
+    setMktBjt('mkt-cn',[[570,690,'market-open'],[780,900,'market-open'],[690,780,'market-lunch']]);
+    setMkt('mkt-hk',statusByLocal('Asia/Hong_Kong',[[570,720,'market-open'],[780,960,'market-open'],[720,780,'market-lunch']]));
+    setMkt('mkt-jp',statusByLocal('Asia/Tokyo',[[540,690,'market-open'],[750,900,'market-open'],[690,750,'market-lunch']]));
+    setMkt('mkt-eu',statusByLocal('Europe/London',[[480,990,'market-open']]));
+    setMkt('mkt-us',statusByLocal('America/New_York',[[570,960,'market-open']]));
 }
 
 updateMarketBar();
