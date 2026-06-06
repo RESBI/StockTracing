@@ -4,7 +4,7 @@
 
 ![Demo](images/GIF%2003-06-2026%2018-43-00.gif)
 
-StockTracing 是一个本地运行的投资研究面板，集成自选股实时追踪、技术指标、AI 分析、机构评级、SEC 13F 机构持仓、交易记录、持仓收益和多市场狩猎扫描。
+StockTracing 是一个本地运行的投资研究面板，用于追踪自选标的、查看技术指标、AI 分析、机构评级、公开机构持仓、交易记录、组合收益和多市场机会扫描。
 
 ## 快速开始
 
@@ -49,22 +49,27 @@ LLM 配置：
 
 ### 仪表盘
 
-- 集中展示自选标的的价格、涨跌、短线变化、周期趋势和综合信号。
-- 支持搜索、添加、删除自选标的。
+- 渐进式加载自选标的，先绘制全部横幅，再填入缓存数据，随后后台并发补齐完整分析。
+- 展示价格、走势、今日涨跌、5 分钟变化、D/W/M/Y 周期涨跌和技术信号。
+- 展示综合技术建议、AI 推荐、PE、目标价和目标价空间。
 - 支持股票和加密货币混合追踪。
-- 提供全屏看板、市场时刻表和盘前/盘后信息。
+- 搜索标的后可直接加入自选，也可进入详情页。
+- 提供主要股指横条、市场时刻表、顶部开闭市状态、全屏模式和盘前/盘后扩展时段信息。
 
 ### 个股详情
 
-- 查看标的概览、行情走势、关键估值指标和综合建议。
-- 支持多周期图表、完整技术指标、机构评级、财报和资讯。
-- 配置 AI 后可生成中文分析总结，并保留历史分析记录。
+- 查看标的概览、行情图表、关键估值指标、技术指标、机构评级、财报和资讯。
+- 资讯默认保留上次加载结果，手动点击后再更新。
+- AI 分析会综合近期资讯、周期涨跌、技术指标、评级、估值、营收和财务摘要。
+- AI 输出会重点分析风险，并给出 `买入`、`观望` 或 `卖出` 信号。
+- 初次进入详情页只读取已有 AI 缓存，不阻塞页面访问；手动刷新 AI 时会同步刷新资料和资讯。
 
 ### 技术扫描
 
 - 批量分析自选标的的技术状态。
 - 按买入、卖出、中性信号聚合展示扫描结果。
-- 用于快速发现技术面偏强或偏弱的标的。
+- 扫描结果包含 RSI、MACD、Bollinger、Stochastic、均线交叉、成交量、综合信号和 AI 信号。
+- 点击“开始扫描”会为每只自选标的刷新一次 AI 分析。
 
 ### 狩猎
 
@@ -119,36 +124,41 @@ StockTracing/
 │   ├── routers/
 │   │   ├── pages.py
 │   │   └── stock.py
-│   └── services/
-│       ├── stock_data.py
-│       ├── financials.py
-│       ├── analyst.py
-│       ├── technical.py
-│       ├── crypto.py
-│       ├── llm_service.py
-│       ├── news_service.py
-│       ├── cache_updater.py
-│       ├── discovery.py
-│       ├── hunter.py
-│       ├── trades.py
-│       ├── institutions.py
-│       ├── institution_mapper.py
-│       └── institution_normalizer.py
+│   ├── services/
+│   │   ├── ai_context.py
+│   │   ├── analyst.py
+│   │   ├── cache_updater.py
+│   │   ├── crypto.py
+│   │   ├── discovery.py
+│   │   ├── financials.py
+│   │   ├── hunter.py
+│   │   ├── institution_mapper.py
+│   │   ├── institution_normalizer.py
+│   │   ├── institutions.py
+│   │   ├── llm_service.py
+│   │   ├── news_service.py
+│   │   ├── stock_data.py
+│   │   ├── technical.py
+│   │   └── trades.py
+│   └── utils/
+│       ├── proxy.py
+│       └── watchlist.py
 ├── frontend/
 │   └── templates/
 │       ├── base.html
-│       ├── index.html
-│       ├── stock_detail.html
-│       ├── scan.html
 │       ├── hunt.html
+│       ├── index.html
 │       ├── institutions.html
-│       ├── trades.html
-│       └── portfolio.html
+│       ├── portfolio.html
+│       ├── scan.html
+│       ├── stock_detail.html
+│       └── trades.html
 └── data/
     ├── config.json
     ├── watchlist.json
     ├── trades.json
     ├── stocktracing.db
+    ├── news_cache/
     ├── institution_holdings.json
     ├── institution_visible_cache.json
     ├── institution_holdings_history/
@@ -161,7 +171,7 @@ StockTracing/
 
 ## 项目实现
 
-项目采用 FastAPI 单体后端 + Jinja2 模板前端的结构，核心业务逻辑集中在 `backend/services/`，页面和 API 路由分别由 `backend/routers/pages.py` 与 `backend/routers/stock.py` 管理。运行数据主要保存在 `data/`，其中 SQLite 用于行情、分析和历史缓存，JSON 文件用于配置、自选、交易记录和部分专题数据。
+项目采用 FastAPI 单体后端 + Jinja2 模板前端。页面路由由 `backend/routers/pages.py` 管理，REST API 由 `backend/routers/stock.py` 管理，核心业务逻辑集中在 `backend/services/`。运行数据主要保存在 `data/`，其中 SQLite 用于行情、分析、财报、AI 和扫描历史缓存，JSON 文件用于配置、自选、交易记录和机构持仓专题数据。
 
 详细架构、数据流和模块说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
