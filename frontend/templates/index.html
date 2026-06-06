@@ -87,6 +87,7 @@
 <script>
 let priceMap={};
 let autoRefreshTimer=null;
+const DASHBOARD_CONCURRENCY=4;
 const majorIndexes=[
     {symbol:'^GSPC',name:'S&P 500'},
     {symbol:'^IXIC',name:'NASDAQ'},
@@ -243,6 +244,48 @@ function makeBar(sym, data){
     </div>`;
 }
 
+function makeSkeletonBar(sym){
+    const displaySym=sym.startsWith('CRYPTO:')?sym.slice(7):sym;
+    priceMap[sym]=priceMap[sym]||{price:null,prevClose:null};
+    return `<div class="card px-4 py-1.5 transition-colors" data-row-symbol="${sym}" style="min-height:52px;width:max-content;min-width:100%">
+        <div class="flex items-center gap-3 h-full">
+            <div class="w-28 shrink-0 leading-tight">
+                <span class="font-bold text-sm block">${displaySym}</span>
+                <span class="text-mute text-[11px] truncate block">加载中...</span>
+            </div>
+            <div class="w-28 shrink-0"><span class="text-mute text-sm">—</span></div>
+            <svg class="sparkline shrink-0" data-symbol="${sym}" width="48" height="18" style="overflow:visible"></svg>
+            <div class="w-20 shrink-0 text-center text-xs text-mute">—</div>
+            <div class="w-20 shrink-0 text-center text-xs"><span class="tick-5m font-medium" data-symbol="${sym}" data-5m="—">—</span></div>
+            <div class="w-20 shrink-0 text-center text-xs text-mute">—</div>
+            <div class="w-20 shrink-0 text-center text-xs text-mute">—</div>
+            <div class="w-20 shrink-0 text-center text-xs text-mute">—</div>
+            <div class="w-20 shrink-0 text-center text-xs text-mute">—</div>
+            <span class="tag tag-mute shrink-0 w-14 text-center">—</span>
+            <span class="tag tag-mute shrink-0 w-14 text-center">—</span>
+            <span class="w-14 shrink-0 text-xs text-center text-mute">—</span>
+            <span class="w-14 shrink-0 text-xs text-center text-mute">—</span>
+            <span class="w-14 shrink-0 text-xs text-center text-mute">—</span>
+        </div>
+    </div>`;
+}
+
+function replaceDashboardRow(sym, html){
+    const row=[...document.querySelectorAll('[data-row-symbol]')].find(el=>el.dataset.rowSymbol===sym);
+    if(row){row.outerHTML=html.includes('data-row-symbol=')?html:html.replace('class="card ',`data-row-symbol="${sym}" class="card `);}
+}
+
+async function runLimited(items,limit,worker){
+    let next=0;
+    const runners=Array.from({length:Math.min(limit,items.length)},async()=>{
+        while(next<items.length){
+            const item=items[next++];
+            await worker(item);
+        }
+    });
+    await Promise.all(runners);
+}
+
 async function loadDashboard(){
     const tags=document.getElementById('watchlist-tags');
     const grid=document.getElementById('dashboard');
@@ -261,20 +304,23 @@ async function loadDashboard(){
         <button onclick="removeOne('${s}')" class="text-mute hover:text-down ml-0.5">&times;</button></span>`;
     }).join('');
 
-    grid.innerHTML='<div class="text-center py-6"><div class="spinner spinner-lg mx-auto mb-3"></div><p class="text-mute text-sm">加载中...</p></div>';
+    grid.innerHTML=syms.map(makeSkeletonBar).join('');
 
-    const results=await Promise.allSettled(syms.map(async s=>{
-        try{const d=await api('/stock/'+s+'/full');return{s,data:d,ok:true};}
-        catch(e){return{s,ok:false,err:e.message};}
-    }));
+    await runLimited(syms,DASHBOARD_CONCURRENCY,async s=>{
+        try{
+            const info=await api('/stock/'+encodeURIComponent(s));
+            replaceDashboardRow(s,makeBar(s,{info,analyst:{},technical:{signals:[]},periods:{changes:{},signals:{}},summary:{}}));
+        }catch(e){}
+    });
 
-    grid.innerHTML=results.map(r=>{
-        if(r.status==='rejected'||!r.value.ok){
-            const sym=r.value?.s||'?';
-            return `<div class="card px-4 py-3"><p class="text-down text-sm">${sym} 加载失败</p></div>`;
+    runLimited(syms,DASHBOARD_CONCURRENCY,async s=>{
+        try{
+            const data=await api('/stock/'+encodeURIComponent(s)+'/full');
+            replaceDashboardRow(s,makeBar(s,data));
+        }catch(e){
+            replaceDashboardRow(s,`<div class="card px-4 py-3" data-row-symbol="${s}"><p class="text-down text-sm">${s} 加载失败</p></div>`);
         }
-        return makeBar(r.value.s, r.value.data);
-    }).join('');
+    });
 }
 
 async function refreshPrices(){
