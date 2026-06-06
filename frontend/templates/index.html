@@ -68,6 +68,7 @@
             <span class="w-20 shrink-0 text-center">M 涨跌/信号</span>
             <span class="w-20 shrink-0 text-center">Y 涨跌/信号</span>
             <span class="shrink-0 w-14 text-center">综合</span>
+            <span class="shrink-0 w-14 text-center">AI</span>
             <span class="w-14 shrink-0 text-center">PE</span>
             <span class="w-14 shrink-0 text-center">目标</span>
             <span class="w-14 shrink-0 text-center">空间</span>
@@ -155,6 +156,7 @@ function makeBar(sym, data){
     const analyst=data.analyst||{};
     const tech=data.technical||{};
     const periods=data.periods||{changes:{},signals:{}};
+    const summary=data.summary||{};
     const pdChg=periods.changes||{};
     const pdSig=periods.signals||{};
     const comp=tech.signals?tech.signals.find(x=>x.indicator==='综合评分'):null;
@@ -169,6 +171,13 @@ function makeBar(sym, data){
     function sigSpan(sig){
         if(!sig||!sig.overall)return'<span class="text-mute">—</span>';
         return`<span class="tag ${tagCls(sig.overall)}" style="font-size:10px;padding:0 3px">${sig.overall==='buy'?'B':sig.overall==='sell'?'S':'N'}</span>`;
+    }
+    function aiTag(summary){
+        const rec=summary.recommendation;
+        if(rec==='买入')return'<span class="tag tag-up shrink-0 w-14 text-center">买入</span>';
+        if(rec==='卖出')return'<span class="tag tag-down shrink-0 w-14 text-center">卖出</span>';
+        if(rec==='观望')return'<span class="tag tag-warn shrink-0 w-14 text-center">观望</span>';
+        return'<span class="tag tag-mute shrink-0 w-14 text-center">—</span>';
     }
 
     const curPrice=info.current_price;
@@ -207,6 +216,7 @@ function makeBar(sym, data){
             <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.M)} ${sigSpan(pdSig.M)}</div>
             <div class="w-20 shrink-0 text-center text-xs">${chgSpan(pdChg.Y)} ${sigSpan(pdSig.Y)}</div>
             <span class="tag ${comp?tagCls(comp.signal):'tag-mute'} shrink-0 w-14 text-center">${comp?signalLabel(comp.signal):'—'}</span>
+            ${aiTag(summary)}
             <span class="w-14 shrink-0 text-xs text-center"><span class="text-mute">${info.pe_ratio?.toFixed(1)||'—'}</span></span>
             <span class="w-14 shrink-0 text-xs text-center"><span>${info.target_mean_price?info.target_mean_price.toFixed(0):'—'}</span></span>
             <span class="w-14 shrink-0 text-xs text-center"><span class="${upside!=null&&upside>0?'up':upside!=null&&upside<0?'down':''}">${upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—'}</span></span>

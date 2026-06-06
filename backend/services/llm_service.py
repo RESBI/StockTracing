@@ -64,25 +64,28 @@ def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
     prompt_hash = _hash_prompt(symbol, context)
     cached = _get_cached(symbol, prompt_hash)
     if cached:
-        return {"enabled": True, "summary": cached, "cached": True}
+        return {"enabled": True, "summary": cached, "cached": True, "recommendation": _extract_recommendation(cached)}
 
     client = _get_client()
     if client is None:
         return {"enabled": False, "summary": "LLM客户端初始化失败。请检查 openai 包是否安装。"}
 
     context_str = json.dumps(context, ensure_ascii=False, indent=2)
-    prompt = f"""你是一位资深股票分析师。请根据以下数据对 {symbol} 进行全面分析总结。
+    prompt = f"""你是一位严谨、风险优先的股票分析师。请根据以下数据对 {symbol} 进行全面分析总结。
 
 数据：
 {context_str}
 
-请从以下维度分析（中文，800字以内）：
-1. **公司概况**：业务、行业地位
-2. **财务健康度**：盈利能力、成长性
-3. **估值分析**：当前估值合理性、机构目标价
-4. **技术面**：当前信号、趋势判断
-5. **风险提示**：潜在风险
-6. **综合建议**：偏多/偏空/观望及理由"""
+请用中文输出，1000字以内，必须覆盖以下维度：
+1. **公司概况**：业务、行业地位和当前市场关注点。
+2. **近期资讯**：结合新闻标题/摘要判断潜在催化和负面事件。
+3. **涨跌与技术面**：结合 D/W/M/Y 涨跌、周期信号、RSI、MACD、Bollinger 和综合技术信号判断趋势。
+4. **机构评级与估值**：结合评级、目标价空间、调级和估值指标判断预期是否充分。
+5. **营收与财务质量**：结合营收、利润、现金流和资产负债变化判断基本面质量。
+6. **风险提示**：详细列出至少 3 个主要风险，包括估值风险、业绩风险、技术面风险、行业/宏观风险或新闻事件风险。
+7. **结论**：最后单独一行输出 `AI信号：买入`、`AI信号：观望` 或 `AI信号：卖出`，并给出一句核心理由。
+
+如果资料缺失，请明确说明缺失项如何影响判断，不要编造数据。"""
 
     try:
         cfg = get_llm_config()
@@ -97,6 +100,20 @@ def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
         )
         summary = response.choices[0].message.content or ""
         _cache_result(symbol, prompt_hash, summary)
-        return {"enabled": True, "summary": summary, "cached": False}
+        return {"enabled": True, "summary": summary, "cached": False, "recommendation": _extract_recommendation(summary)}
     except Exception as e:
         return {"enabled": True, "summary": f"LLM分析出错: {str(e)}", "cached": False}
+
+
+def _extract_recommendation(text: str) -> str | None:
+    lowered = text.lower()
+    for label in ("买入", "观望", "卖出"):
+        if f"ai信号：{label}" in lowered or f"ai信号: {label}" in lowered or f"ai 信号：{label}" in lowered:
+            return label
+    if "买入" in text:
+        return "买入"
+    if "卖出" in text:
+        return "卖出"
+    if "观望" in text:
+        return "观望"
+    return None

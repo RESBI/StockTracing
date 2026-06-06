@@ -169,7 +169,7 @@ function renderAll(){
     const info=allData.info||{};
     document.getElementById('stock-title').textContent=info.symbol+' — '+(info.name||'');
 
-    renderOverview(info,allData.analyst||{},allData.technical||{});
+    renderOverview(info,allData.analyst||{},allData.technical||{},allData.summary||{});
     renderSignals(allData.technical);
     renderIndicatorsDetail(allData.technical);
     renderAnalyst(allData.analyst||{},info);
@@ -179,11 +179,20 @@ function renderAll(){
     aiHistoryLoaded=false;
 }
 
-function renderOverview(info,analyst,tech){
+function aiSignal(summary){
+    const rec=summary&&summary.recommendation;
+    if(rec==='买入')return{label:'买入',cls:'tag-up',color:'#00B887'};
+    if(rec==='卖出')return{label:'卖出',cls:'tag-down',color:'#F54D4D'};
+    if(rec==='观望')return{label:'观望',cls:'tag-warn',color:'#F59E0B'};
+    return{label:'—',cls:'tag-mute',color:'#848E9C'};
+}
+
+function renderOverview(info,analyst,tech,summary){
     const chg=fmtChg(info.current_price,info.previous_close);
     const upside=analyst.upside_percent;
     const upsideStr=upside!=null?(upside>0?'+':'')+upside.toFixed(1)+'%':'—';
     const rec=info.recommendation||analyst.recommendation||'—';
+    const ai=aiSignal(summary);
 
     document.getElementById('overview-cards').innerHTML=`
         <div class="card p-5 lg:col-span-2">
@@ -220,11 +229,12 @@ function renderOverview(info,analyst,tech){
     const buyN=sigs.filter(s=>s.signal==='buy').length;
     const sellN=sigs.filter(s=>s.signal==='sell').length;
     document.getElementById('key-metrics').innerHTML=`
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
             ${metricCard('分析师覆盖',String(analyst.number_of_analysts||0)+'位','#848E9C')}
             ${metricCard('买入信号',String(buyN),buyN>sellN?'#00B887':'#848E9C')}
             ${metricCard('卖出信号',String(sellN),sellN>buyN?'#F54D4D':'#848E9C')}
             ${metricCard('综合建议',buyN>sellN?'偏多':sellN>buyN?'偏空':'中性',buyN>sellN?'#00B887':sellN>buyN?'#F54D4D':'#F59E0B')}
+            ${metricCard('AI推荐',ai.label,ai.color)}
         </div>`;
 }
 
@@ -377,9 +387,13 @@ function renderAI(summary){
         cont.innerHTML=`<p class="text-mute text-sm">${(summary&&summary.summary)||'LLM未配置。在 data/config.json 中配置 api_key 后可用。'}</p>`;
         return;
     }
+    const ai=aiSignal(summary);
     const cached=summary.cached?'<span class="tag tag-mute ml-2">缓存</span>':'';
     const text=(summary.summary||'').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong style="color:#93C5FD">$1</strong>');
-    cont.innerHTML=`<div class="prose-sm" style="color:#CBD5E1">${text}</div>`;
+    cont.innerHTML=`<div class="bg-bg border border-bord rounded-lg p-3 mb-4 flex items-center justify-between">
+        <div><p class="text-xs text-mute mb-1">AI 推荐</p><p class="text-lg font-bold" style="color:${ai.color}">${ai.label}</p></div>
+        <span>${cached}</span>
+    </div><div class="prose-sm" style="color:#CBD5E1">${text}</div>`;
 }
 
 async function refreshAI(){
@@ -388,7 +402,9 @@ async function refreshAI(){
     btn.textContent='分析中...';
     try{
         const s=await api('/stock/'+SYMBOL+'/summary');
+        allData.summary=s;
         renderAI(s);
+        renderOverview(allData.info||{},allData.analyst||{},allData.technical||{},s);
         aiHistoryLoaded=false;
         loadAIHistory();
     }catch(e){
