@@ -113,6 +113,7 @@
 const SYMBOL='{{ symbol }}';
 let allData={};
 let priceChart=null;
+let latestAiTimer=null;
 
 function diffPrice(oldS,newS){
     if(!oldS||oldS===newS)return{prefix:newS,changed:'',suffix:''};
@@ -414,6 +415,19 @@ async function refreshAI(){
     btn.textContent='刷新分析';
 }
 
+async function refreshLatestAI(){
+    try{
+        const s=await api('/stock/'+SYMBOL+'/summary/latest');
+        if(!s||!s.summary)return;
+        const oldSummary=allData.summary&&allData.summary.summary;
+        if(oldSummary===s.summary)return;
+        allData.summary=s;
+        renderAI(s);
+        renderOverview(allData.info||{},allData.analyst||{},allData.technical||{},s);
+        aiHistoryLoaded=false;
+    }catch(e){}
+}
+
 async function loadAIHistory(){
     const cont=document.getElementById('ai-history');
     cont.innerHTML='<div class="text-center py-2"><div class="spinner mx-auto mb-1"></div></div>';
@@ -494,5 +508,6 @@ async function refreshPriceOnly(){
     }catch(e){}
 }
 detailPriceTimer=setInterval(refreshPriceOnly,1000);
+latestAiTimer=setInterval(refreshLatestAI,60000);
 </script>
 {% endblock %}

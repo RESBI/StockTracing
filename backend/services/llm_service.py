@@ -57,6 +57,25 @@ def _cache_result(symbol: str, prompt_hash: str, content: str) -> None:
         db.close()
 
 
+def get_latest_summary(symbol: str) -> dict[str, Any]:
+    db: Session = SessionLocal()
+    try:
+        row = db.query(LLMCache).filter(
+            LLMCache.symbol == symbol.upper().strip(),
+        ).order_by(LLMCache.created_at.desc()).first()
+        if not row:
+            return {"enabled": get_llm_enabled(), "summary": "", "cached": True, "recommendation": None}
+        return {
+            "enabled": get_llm_enabled(),
+            "summary": row.content,
+            "cached": True,
+            "recommendation": _extract_recommendation(row.content),
+            "created_at": row.created_at.isoformat() if row.created_at else "",
+        }
+    finally:
+        db.close()
+
+
 def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
     if not get_llm_enabled():
         return {"enabled": False, "summary": "LLM未配置。请在 data/config.json 中填入 api_key。支持OpenAI/Ollama等兼容API。"}

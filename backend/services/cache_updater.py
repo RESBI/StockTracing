@@ -4,14 +4,19 @@ from backend.config import retry_on_rate_limit, CACHE_TTL_SECONDS
 from backend.database.models import StockCache, SessionLocal
 from backend.utils.watchlist import load_watchlist
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 
 class CacheUpdater:
     def __init__(self, interval: int = 30):
         self._interval = interval
         self._thread: threading.Thread | None = None
+        self._ai_thread: threading.Thread | None = None
         self._running = False
         self._ticks: dict[str, dict] = {}
+        self._ai_refreshed: dict[str, str] = {}
+        self._ai_queue: list[str] = []
+        self._ai_lock = threading.Lock()
 
     def start(self):
         if self._running:
@@ -19,6 +24,8 @@ class CacheUpdater:
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
+        self._ai_thread = threading.Thread(target=self._ai_loop, daemon=True)
+        self._ai_thread.start()
 
     def stop(self):
         self._running = False
@@ -37,6 +44,7 @@ class CacheUpdater:
                     for sym in batch:
                         try:
                             self._update_one(sym)
+                            self._maybe_refresh_ai(sym)
                         except Exception:
                             pass
                         time.sleep(0.5)
@@ -44,6 +52,23 @@ class CacheUpdater:
             except Exception:
                 pass
             time.sleep(self._interval)
+
+    def _ai_loop(self):
+        while self._running:
+            sym = None
+            with self._ai_lock:
+                if self._ai_queue:
+                    sym = self._ai_queue.pop(0)
+            if not sym:
+                time.sleep(10)
+                continue
+            try:
+                from backend.services.ai_context import build_stock_ai_context
+                from backend.services.llm_service import generate_summary
+                generate_summary(sym, build_stock_ai_context(sym))
+            except Exception:
+                pass
+            time.sleep(2)
 
     @retry_on_rate_limit
     def _update_one(self, symbol: str) -> None:
@@ -133,6 +158,41 @@ class CacheUpdater:
             db.commit()
         finally:
             db.close()
+
+    def _market_key(self, symbol: str) -> str:
+        sym = symbol.upper().strip()
+        if sym.endswith((".SS", ".SZ")):
+            return "CN"
+        if sym.endswith(".HK"):
+            return "HK"
+        if sym.endswith(".T"):
+            return "JP"
+        return "US"
+
+    def _is_after_market_close(self, symbol: str) -> tuple[bool, str]:
+        market = self._market_key(symbol)
+        configs = {
+            "US": (ZoneInfo("America/New_York"), 16, 20),
+            "CN": (ZoneInfo("Asia/Shanghai"), 15, 20),
+            "HK": (ZoneInfo("Asia/Hong_Kong"), 16, 30),
+            "JP": (ZoneInfo("Asia/Tokyo"), 15, 20),
+        }
+        tz, hour, minute = configs[market]
+        now = datetime.now(tz)
+        after_close = (now.hour, now.minute) >= (hour, minute)
+        return after_close and now.weekday() < 5, now.date().isoformat()
+
+    def _maybe_refresh_ai(self, symbol: str) -> None:
+        sym = symbol.upper().strip()
+        if sym.startswith("CRYPTO:") or "-USDT" in sym or "-USD" in sym:
+            return
+        ok, day_key = self._is_after_market_close(sym)
+        if not ok or self._ai_refreshed.get(sym) == day_key:
+            return
+        self._ai_refreshed[sym] = day_key
+        with self._ai_lock:
+            if sym not in self._ai_queue:
+                self._ai_queue.append(sym)
 
     def get_tick(self, symbol: str) -> dict | None:
         sym = symbol.upper().strip()

@@ -6,7 +6,8 @@ from backend.services.stock_data import get_stock_info, get_stock_history, searc
 from backend.services.financials import get_financials
 from backend.services.analyst import get_analyst_info
 from backend.services.technical import calculate_all_indicators, get_period_analysis
-from backend.services.llm_service import generate_summary
+from backend.services.ai_context import build_stock_ai_context
+from backend.services.llm_service import generate_summary, get_latest_summary
 from backend.services.news_service import get_stock_news, search_stock_insights
 from backend.services.hunter import hunt, get_markets, get_sectors
 from backend.services.discovery import discover_all_stocks
@@ -47,75 +48,6 @@ templates = Jinja2Templates(directory="frontend/templates")
 def _resolve_sym(symbol: str) -> str:
     r = _resolve_asymbol(symbol)
     return r if r else symbol.upper().strip()
-
-
-def _compact_news(news: list[dict], limit: int = 6) -> list[dict]:
-    return [{
-        "title": n.get("title", ""),
-        "snippet": n.get("snippet", ""),
-        "source": n.get("source", ""),
-        "date": n.get("date", ""),
-    } for n in (news or [])[:limit]]
-
-
-def _compact_periods(periods: dict) -> dict:
-    return {
-        "changes": (periods or {}).get("changes", {}),
-        "signals": (periods or {}).get("signals", {}),
-    }
-
-
-def _compact_technical(tech: dict) -> dict:
-    if not tech:
-        return {}
-    return {
-        "latest_price": tech.get("latest_price"),
-        "signals": (tech.get("signals") or [])[-10:],
-        "rsi": (tech.get("rsi") or [None])[-1],
-        "macd": {k: (v[-1] if isinstance(v, list) and v else None) for k, v in (tech.get("macd") or {}).items()},
-        "bollinger": {k: (v[-1] if isinstance(v, list) and v else None) for k, v in (tech.get("bollinger") or {}).items()},
-    }
-
-
-def _compact_financials(financials: dict) -> dict:
-    fields = (
-        "Total Revenue", "Operating Revenue", "Revenue",
-        "Net Income", "Operating Income", "Gross Profit",
-        "Free Cash Flow", "Operating Cash Flow", "Total Cash From Operating Activities",
-        "Total Assets", "Total Liabilities Net Minority Interest",
-    )
-
-    def pick(rows: list[dict], limit: int = 4) -> list[dict]:
-        compact = []
-        for row in (rows or [])[:limit]:
-            item = {"period": row.get("period")}
-            for key in fields:
-                if key in row:
-                    item[key] = row.get(key)
-            compact.append(item)
-        return compact
-
-    return {
-        "annual_income": pick((financials or {}).get("income_statement", [])),
-        "quarterly_income": pick((financials or {}).get("quarterly_income", []), 6),
-        "annual_cash_flow": pick((financials or {}).get("cash_flow", [])),
-        "annual_balance_sheet": pick((financials or {}).get("balance_sheet", [])),
-    }
-
-
-def _build_ai_context(info: dict, analyst: dict, tech: dict, periods: dict, financials: dict, news: list[dict]) -> dict:
-    return {
-        "基本信息": {k: v for k, v in (info or {}).items() if k not in ("raw_info", "error")},
-        "近期资讯": _compact_news(news),
-        "不同时间段涨跌与信号": _compact_periods(periods),
-        "技术指标": _compact_technical(tech),
-        "机构评级": {
-            **(analyst or {}),
-            "recent_ratings": (analyst or {}).get("recent_ratings", [])[:8],
-            "upgrades_downgrades": (analyst or {}).get("upgrades_downgrades", [])[:8],
-        },
-        "营收与财务摘要": _compact_financials(financials),
-    }
 
 
 @router.get("/stock/{symbol}")
@@ -206,32 +138,15 @@ def api_insights(symbol: str):
 def api_summary(symbol: str):
     try:
         sym = _resolve_sym(symbol)
-        info = get_stock_info(sym)
-        try:
-            analyst = get_analyst_info(sym)
-        except Exception:
-            analyst = {}
-        try:
-            financials = get_financials(sym)
-        except Exception:
-            financials = {}
-        try:
-            periods = get_period_analysis(sym)
-        except Exception:
-            periods = {}
-        try:
-            news = get_stock_news(sym)
-        except Exception:
-            news = []
-        tech = {}
-        try:
-            tech = calculate_all_indicators(sym)
-        except Exception:
-            pass
-        context = _build_ai_context(info, analyst, tech, periods, financials, news)
+        context = build_stock_ai_context(sym)
         return generate_summary(sym, context)
     except Exception as e:
         return {"enabled": False, "summary": f"数据获取失败: {str(e)}"}
+
+
+@router.get("/stock/{symbol}/summary/latest")
+def api_latest_summary(symbol: str):
+    return get_latest_summary(_resolve_sym(symbol))
 
 
 @router.get("/stock/{symbol}/full")
@@ -308,26 +223,7 @@ def api_full_analysis(symbol: str, refresh: bool = False):
     except Exception:
         result["periods"] = {"changes": {}, "signals": {}}
 
-    try:
-        if result.get("info", {}).get("name"):
-            summary_news = []
-            try:
-                summary_news = get_stock_news(sym)
-            except Exception:
-                summary_news = []
-            summary_context = _build_ai_context(
-                result.get("info", {}),
-                result.get("analyst", {}),
-                tech if "tech" in locals() else result.get("technical", {}),
-                result.get("periods", {}),
-                result.get("financials", {}),
-                summary_news,
-            )
-            result["summary"] = generate_summary(sym, summary_context)
-        else:
-            result["summary"] = {"enabled": False, "summary": ""}
-    except Exception:
-        result["summary"] = {"enabled": False, "summary": ""}
+    result["summary"] = get_latest_summary(sym)
 
     return result
 
