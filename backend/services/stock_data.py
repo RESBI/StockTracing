@@ -286,6 +286,7 @@ def get_tick(symbol: str) -> dict:
             "post_market_change": cached_tick.get("post_market_change"),
             "regular_market_price": cached_tick.get("regular_market_price"),
             "previous_close": cached_tick.get("previous_close"),
+            "market_state": cached_tick.get("market_state"),
         }
 
     return {
@@ -299,4 +300,5 @@ def get_tick(symbol: str) -> dict:
         "post_market": ext.get("post_market_price"),
         "post_market_chg": ext.get("post_market_change"),
         "regular_price": ext.get("regular_market_price"),
+        "market_state": ext.get("market_state"),
     }

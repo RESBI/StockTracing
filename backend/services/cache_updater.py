@@ -98,19 +98,22 @@ class CacheUpdater:
         post_change_pct = info.get("postMarketChangePercent")
         market_state = info.get("marketState", "")
 
-        # Update tick cache, preserving extended hours data when new value is None
-        # Clear pre/post when market is in REGULAR session
+        # Keep only the active extended-hours side. Otherwise stale post-market
+        # values can remain visible during the next pre-market session.
         existing = self._ticks.get(sym, {})
         in_regular = market_state == "REGULAR"
+        in_pre = market_state == "PRE"
+        in_post = market_state == "POST"
         self._ticks[sym] = {
             "price": price if price is not None else existing.get("price"),
             "ts": time.time(),
-            "pre_market_price": None if in_regular else (pre_price if pre_price is not None else existing.get("pre_market_price")),
-            "pre_market_change": None if in_regular else (pre_change_pct if pre_change_pct is not None else existing.get("pre_market_change")),
-            "post_market_price": None if in_regular else (post_price if post_price is not None else existing.get("post_market_price")),
-            "post_market_change": None if in_regular else (post_change_pct if post_change_pct is not None else existing.get("post_market_change")),
+            "pre_market_price": (pre_price if pre_price is not None else existing.get("pre_market_price")) if in_pre else None,
+            "pre_market_change": (pre_change_pct if pre_change_pct is not None else existing.get("pre_market_change")) if in_pre else None,
+            "post_market_price": (post_price if post_price is not None else existing.get("post_market_price")) if in_post else None,
+            "post_market_change": (post_change_pct if post_change_pct is not None else existing.get("post_market_change")) if in_post else None,
             "regular_market_price": regular_price if regular_price is not None else existing.get("regular_market_price"),
             "previous_close": (info.get("previousClose") or info.get("regularMarketPreviousClose")) or existing.get("previous_close"),
+            "market_state": market_state,
         }
 
         data = {
@@ -208,6 +211,7 @@ class CacheUpdater:
                 "post_market_change": tick.get("post_market_change"),
                 "regular_market_price": tick.get("regular_market_price"),
                 "previous_close": tick.get("previous_close"),
+                "market_state": tick.get("market_state"),
             }
         return None
 
