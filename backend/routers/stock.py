@@ -370,8 +370,8 @@ def api_trade_stats():
 
 
 @router.get("/trades/portfolio")
-def api_portfolio(interval: str = "1d"):
-    return get_portfolio(interval=interval)
+def api_portfolio(interval: str = "1d", range_key: str = "all"):
+    return get_portfolio(interval=interval, range_key=range_key)
 
 
 # ---------- Institution Holdings ----------

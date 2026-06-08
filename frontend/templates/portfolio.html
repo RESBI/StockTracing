@@ -25,9 +25,16 @@
     <div class="card p-4 mb-6">
         <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-mute">收益曲线</h3>
-            <div class="flex gap-1">
-                <button class="btn btn-outline btn-xs" id="btn-1d" onclick="loadPnlCurve('1d')">日线</button>
-                <button class="btn btn-acc btn-xs" id="btn-1h" onclick="loadPnlCurve('1h')">小时</button>
+            <div class="flex flex-wrap justify-end gap-1">
+                <button class="btn btn-outline btn-xs" id="btn-1d" onclick="setPnlInterval('1d')">日线</button>
+                <button class="btn btn-acc btn-xs" id="btn-1h" onclick="setPnlInterval('1h')">小时</button>
+                <span class="w-px bg-bord mx-1"></span>
+                <button class="btn btn-outline btn-xs" id="btn-range-7d" onclick="setPnlRange('7d')">7d</button>
+                <button class="btn btn-outline btn-xs" id="btn-range-14d" onclick="setPnlRange('14d')">14d</button>
+                <button class="btn btn-acc btn-xs" id="btn-range-30d" onclick="setPnlRange('30d')">30d</button>
+                <button class="btn btn-outline btn-xs" id="btn-range-180d" onclick="setPnlRange('180d')">180d</button>
+                <button class="btn btn-outline btn-xs" id="btn-range-360d" onclick="setPnlRange('360d')">360d</button>
+                <button class="btn btn-outline btn-xs" id="btn-range-all" onclick="setPnlRange('all')">all</button>
             </div>
         </div>
         <div style="position:relative;height:280px"><canvas id="pnl-chart"></canvas></div>
@@ -43,10 +50,12 @@
 {% block scripts %}
 <script>
 let symbolChart=null,sectorChart=null,pnlChart=null;
+let pnlInterval='1h';
+let pnlRange='30d';
 
 async function loadPortfolio(){
     try{
-        const data=await api('/trades/portfolio?interval=1h');
+        const data=await api('/trades/portfolio?interval='+pnlInterval+'&range_key='+pnlRange);
         document.getElementById('s-cost').textContent='$'+data.total_cost.toFixed(2);
         document.getElementById('s-total').textContent='$'+data.total_value.toFixed(2);
         const totalPnl=data.holdings.reduce((s,h)=>s+h.pnl,0);
@@ -60,11 +69,21 @@ async function loadPortfolio(){
     }catch(e){}
 }
 
-async function loadPnlCurve(interval){
-    document.getElementById('btn-1d').className='btn '+(interval==='1d'?'btn-acc':'btn-outline')+' btn-xs';
-    document.getElementById('btn-1h').className='btn '+(interval==='1h'?'btn-acc':'btn-outline')+' btn-xs';
+function updatePnlButtons(){
+    document.getElementById('btn-1d').className='btn '+(pnlInterval==='1d'?'btn-acc':'btn-outline')+' btn-xs';
+    document.getElementById('btn-1h').className='btn '+(pnlInterval==='1h'?'btn-acc':'btn-outline')+' btn-xs';
+    ['7d','14d','30d','180d','360d','all'].forEach(r=>{
+        document.getElementById('btn-range-'+r).className='btn '+(pnlRange===r?'btn-acc':'btn-outline')+' btn-xs';
+    });
+}
+
+function setPnlInterval(interval){pnlInterval=interval;loadPnlCurve();}
+function setPnlRange(range){pnlRange=range;loadPnlCurve();}
+
+async function loadPnlCurve(){
+    updatePnlButtons();
     try{
-        const data=await api('/trades/portfolio?interval='+interval);
+        const data=await api('/trades/portfolio?interval='+pnlInterval+'&range_key='+pnlRange);
         renderPnlCurve(data.pnl_curve);
     }catch(e){}
 }
@@ -139,9 +158,12 @@ function renderHoldings(holdings){
 }
 
 function renderPnlCurve(curve){
-    if(!curve.length)return;
     const ctx=document.getElementById('pnl-chart').getContext('2d');
     if(pnlChart)pnlChart.destroy();
+    if(!curve.length){
+        pnlChart=new Chart(ctx,{type:'line',data:{labels:[],datasets:[{label:'累计盈亏',data:[]}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{ticks:{color:'#4A5466'},grid:{color:'#1A2030'}},y:{ticks:{color:'#4A5466'},grid:{color:'#1A2030'}}}}});
+        return;
+    }
     const lastPnl=curve[curve.length-1].pnl;
     pnlChart=new Chart(ctx,{type:'line',data:{labels:curve.map(d=>d.date),datasets:[{label:'累计盈亏',data:curve.map(d=>d.pnl),
         borderColor:lastPnl>=0?'#00B887':'#F54D4D',backgroundColor:(lastPnl>=0?'#00B887':'#F54D4D')+'10',fill:true,tension:.3,pointRadius:0,borderWidth:2}]},

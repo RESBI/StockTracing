@@ -157,7 +157,7 @@ def get_trade_stats() -> dict[str, Any]:
     }
 
 
-def get_portfolio(interval: str = "1d") -> dict[str, Any]:
+def get_portfolio(interval: str = "1d", range_key: str = "all") -> dict[str, Any]:
     from backend.database.models import StockCache, SessionLocal
     from collections import defaultdict
     trades = _load()
@@ -218,7 +218,7 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
         })
 
     # P&L curve data
-    pnl_curve = _compute_pnl_curve(db, interval)
+    pnl_curve = _compute_pnl_curve(db, interval, range_key)
     db.close()
 
     # Symbol pie
@@ -237,7 +237,7 @@ def get_portfolio(interval: str = "1d") -> dict[str, Any]:
     }
 
 
-def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
+def _compute_pnl_curve(db, interval: str = "1d", range_key: str = "all") -> list[dict]:
     from backend.database.models import StockCache, AnalysisCache
     from datetime import datetime, timedelta
     from collections import defaultdict
@@ -319,8 +319,10 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
         return []
 
     all_dates.sort()
-    start = datetime.strptime(all_dates[0], "%Y-%m-%d")
     end = datetime.now()
+    first_trade_start = datetime.strptime(all_dates[0], "%Y-%m-%d")
+    range_days = {"7d": 7, "14d": 14, "30d": 30, "180d": 180, "360d": 360}.get(range_key)
+    start = max(first_trade_start, end - timedelta(days=range_days)) if range_days else first_trade_start
 
     # For hourly, interpolate from daily data
     if interval == "1h":
@@ -332,6 +334,11 @@ def _compute_pnl_curve(db, interval: str = "1d") -> list[dict]:
                     all_timestamps.add(k)
         if all_timestamps:
             all_timestamps = sorted(all_timestamps)
+            if range_days:
+                cutoff = start.strftime("%Y-%m-%d %H:%M")
+                all_timestamps = [k for k in all_timestamps if k >= cutoff]
+                if not all_timestamps:
+                    return []
             start_dt = datetime.strptime(all_timestamps[0], "%Y-%m-%d %H:%M")
             end_dt = datetime.strptime(all_timestamps[-1], "%Y-%m-%d %H:%M")
             step = timedelta(hours=1)
