@@ -1,7 +1,10 @@
 import time
 import threading
-from backend.config import retry_on_rate_limit, CACHE_TTL_SECONDS
-from backend.database.models import StockCache, SessionLocal
+from backend.config import retry_on_rate_limit, CACHE_TTL_SECONDS, CACHE_UPDATE_INTERVAL
+from backend.database.models import StockCache
+from backend.database.deps import db_session
+from backend.services import ai_task
+from backend.utils.logger import logger
 from backend.utils.watchlist import load_watchlist
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -15,8 +18,6 @@ class CacheUpdater:
         self._running = False
         self._ticks: dict[str, dict] = {}
         self._ai_refreshed: dict[str, str] = {}
-        self._ai_queue: list[str] = []
-        self._ai_lock = threading.Lock()
 
     def start(self):
         if self._running:
@@ -45,29 +46,32 @@ class CacheUpdater:
                         try:
                             self._update_one(sym)
                             self._maybe_refresh_ai(sym)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("cache update failed for %s: %s", sym, e)
                         time.sleep(0.5)
                     time.sleep(1.5)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("cache loop iteration error: %s", e)
             time.sleep(self._interval)
 
     def _ai_loop(self):
+        """Process AI tasks from the persistent queue."""
         while self._running:
-            sym = None
-            with self._ai_lock:
-                if self._ai_queue:
-                    sym = self._ai_queue.pop(0)
-            if not sym:
-                time.sleep(10)
-                continue
             try:
-                from backend.services.ai_context import build_stock_ai_context
-                from backend.services.llm_service import generate_summary
-                generate_summary(sym, build_stock_ai_context(sym))
-            except Exception:
-                pass
+                task = ai_task.claim_next()
+                if not task:
+                    time.sleep(10)
+                    continue
+                try:
+                    from backend.services.ai_context import build_stock_ai_context
+                    from backend.services.llm_service import generate_summary
+                    generate_summary(task.symbol, build_stock_ai_context(task.symbol))
+                    ai_task.mark_done(task.id)
+                    logger.info("AI task done: %s", task.symbol)
+                except Exception as e:
+                    ai_task.mark_failed(task.id, str(e))
+            except Exception as e:
+                logger.warning("AI loop error: %s", e)
             time.sleep(2)
 
     @retry_on_rate_limit
@@ -82,8 +86,8 @@ class CacheUpdater:
                 info = get_crypto_info(sym.replace("CRYPTO:", ""))
                 if info and info.get("current_price"):
                     self._ticks[sym] = {"price": info["current_price"], "ts": time.time()}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("crypto tick update failed for %s: %s", sym, e)
             return
 
         import yfinance as yf
@@ -154,8 +158,7 @@ class CacheUpdater:
         else:
             self._ticks[sym] = {"price": price, "ts": time.time()}
 
-        db = SessionLocal()
-        try:
+        with db_session() as db:
             existing = db.query(StockCache).filter(StockCache.symbol == sym).first()
             if existing:
                 for k, v in data.items():
@@ -163,8 +166,6 @@ class CacheUpdater:
             else:
                 db.add(StockCache(**data))
             db.commit()
-        finally:
-            db.close()
 
     def _market_key(self, symbol: str) -> str:
         sym = symbol.upper().strip()
@@ -197,9 +198,7 @@ class CacheUpdater:
         if not ok or self._ai_refreshed.get(sym) == day_key:
             return
         self._ai_refreshed[sym] = day_key
-        with self._ai_lock:
-            if sym not in self._ai_queue:
-                self._ai_queue.append(sym)
+        ai_task.enqueue(sym)
 
     def get_tick(self, symbol: str) -> dict | None:
         sym = symbol.upper().strip()
@@ -229,8 +228,12 @@ class CacheUpdater:
 _updater: CacheUpdater | None = None
 
 
-def get_updater() -> CacheUpdater:
+def get_updater(interval: int | None = None) -> CacheUpdater:
+    """Get the singleton CacheUpdater. Interval defaults to CACHE_UPDATE_INTERVAL.
+
+    Pass interval only for testing (must be called before first use).
+    """
     global _updater
     if _updater is None:
-        _updater = CacheUpdater(interval=1)
+        _updater = CacheUpdater(interval=interval if interval is not None else CACHE_UPDATE_INTERVAL)
     return _updater

@@ -12,7 +12,10 @@ data/sec_ticker_cache.json
 data/sec_ticker_exchange_cache.json
 data/nasdaq_directory_cache.json
 data/ticker_sector_cache.json
+data/logs/
 __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
+*.bak

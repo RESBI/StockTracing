@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from backend.config import DATA_DIR, get_proxy_dict
+from backend.config import DATA_DIR, TTL, get_proxy_dict, get_sec_user_agent
 
 
 MAPPING_FILE = DATA_DIR / "cusip_mapping_cache.json"
@@ -11,7 +11,7 @@ SEC_TICKER_FILE = DATA_DIR / "sec_ticker_cache.json"
 SEC_EXCHANGE_FILE = DATA_DIR / "sec_ticker_exchange_cache.json"
 NASDAQ_DIRECTORY_FILE = DATA_DIR / "nasdaq_directory_cache.json"
 TICKER_SECTOR_FILE = DATA_DIR / "ticker_sector_cache.json"
-MAP_TTL_SECONDS = 30 * 24 * 60 * 60
+MAP_TTL_SECONDS = TTL.MAPPING
 US_EXCHANGES = {"US", "UN", "UW", "UQ", "UP", "UA", "UC", "UB", "UT", "UM", "UX", "UD", "UF"}
 
 
@@ -59,7 +59,7 @@ def _load_sec_ticker_cache() -> dict[str, Any]:
             pass
     try:
         import requests
-        r = requests.get("https://www.sec.gov/files/company_tickers.json", headers={"User-Agent": "StockTracing/1.0 contact@example.com"}, timeout=20, proxies=get_proxy_dict())
+        r = requests.get("https://www.sec.gov/files/company_tickers.json", headers={"User-Agent": get_sec_user_agent()}, timeout=20, proxies=get_proxy_dict())
         r.raise_for_status()
         result = {}
         for row in r.json().values():
@@ -77,7 +77,7 @@ def _load_sec_ticker_cache() -> dict[str, Any]:
 def _download_sec_exchange_directory() -> dict[str, Any]:
     try:
         import requests
-        r = requests.get("https://www.sec.gov/files/company_tickers_exchange.json", headers={"User-Agent": "StockTracing/1.0 contact@example.com"}, timeout=20, proxies=get_proxy_dict())
+        r = requests.get("https://www.sec.gov/files/company_tickers_exchange.json", headers={"User-Agent": get_sec_user_agent()}, timeout=20, proxies=get_proxy_dict())
         r.raise_for_status()
         payload = r.json()
         fields = payload.get("fields", [])

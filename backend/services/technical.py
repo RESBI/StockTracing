@@ -1,10 +1,15 @@
 import math
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
 import yfinance as yf
 
-from backend.config import INDICATOR_PARAMS
+from backend.config import INDICATOR_PARAMS, TTL
+from backend.database.models import AnalysisCache
+from backend.database.deps import db_session
+from backend.utils.logger import logger
 
 
 def _get_hist_data(symbol: str, period: str = "1y") -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -41,21 +46,17 @@ def _round_arr(arr: np.ndarray) -> list:
 
 
 def calculate_all_indicators(symbol: str) -> dict[str, Any]:
-    from backend.database.models import AnalysisCache, SessionLocal
     sym = symbol.upper().strip()
 
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         row = db.query(AnalysisCache).filter(
             AnalysisCache.symbol == sym,
             AnalysisCache.analysis_type == "full_indicators",
         ).first()
         if row and row.updated_at:
-            age = (__import__('time').time() - row.updated_at.timestamp())
-            if age < 600:
+            age = (time.time() - row.updated_at.timestamp())
+            if age < TTL.INDICATORS:
                 return row.data
-    finally:
-        db.close()
 
     closes, highs, lows, volumes, opens = _get_hist_data(symbol)
 
@@ -165,26 +166,22 @@ def calculate_all_indicators(symbol: str) -> dict[str, Any]:
     result["signals"] = _generate_signals(result, closes, volumes, latest_close, rsi, macd_histogram, stoch_k, upper, lower, sma_short, sma_long)
 
     # Save to cache
-    from backend.database.models import AnalysisCache, SessionLocal
-    from datetime import datetime, timezone
-    db2 = SessionLocal()
-    try:
-        existing = db2.query(AnalysisCache).filter(
-            AnalysisCache.symbol == sym,
-            AnalysisCache.analysis_type == "full_indicators",
-        ).first()
-        now = datetime.now(timezone.utc)
-        if existing:
-            existing.data = result
-            existing.updated_at = now
-        else:
-            db2.add(AnalysisCache(symbol=sym, analysis_type="full_indicators",
-                                  data=result, updated_at=now))
-        db2.commit()
-    except Exception:
-        pass
-    finally:
-        db2.close()
+    with db_session() as db2:
+        try:
+            existing = db2.query(AnalysisCache).filter(
+                AnalysisCache.symbol == sym,
+                AnalysisCache.analysis_type == "full_indicators",
+            ).first()
+            now = datetime.now(timezone.utc)
+            if existing:
+                existing.data = result
+                existing.updated_at = now
+            else:
+                db2.add(AnalysisCache(symbol=sym, analysis_type="full_indicators",
+                                      data=result, updated_at=now))
+            db2.commit()
+        except Exception as e:
+            logger.warning("save indicators cache failed for %s: %s", sym, e)
 
     return result
 

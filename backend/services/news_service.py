@@ -14,19 +14,25 @@ def _get_cache_path(symbol: str) -> str:
 
 
 def _read_cache(symbol: str, ignore_ttl: bool = False) -> list[dict] | None:
+    items, _ = _read_cache_meta(symbol, ignore_ttl=ignore_ttl)
+    return items
+
+
+def _read_cache_meta(symbol: str, ignore_ttl: bool = False) -> tuple[list[dict] | None, bool]:
+    """Return (items, is_stale). is_stale=True when cache exists but is older than TTL."""
     path = _get_cache_path(symbol)
     if not __import__("os").path.exists(path):
-        return None
+        return None, False
     try:
         with open(path, encoding="utf-8") as f:
             data = json.loads(f.read())
         ts = data.get("_ts", 0)
         age = datetime.now(timezone.utc).timestamp() - ts
         if ignore_ttl or age < NEWS_CACHE_TTL:
-            return data.get("items", [])
+            return data.get("items", []), False
+        return data.get("items", []), True
     except Exception:
-        pass
-    return None
+        return None, False
 
 
 def _write_cache(symbol: str, items: list[dict]) -> None:
@@ -116,6 +122,14 @@ def get_stock_news(symbol: str, force_refresh: bool = False) -> list[dict]:
 
 def get_cached_stock_news(symbol: str) -> list[dict]:
     return _read_cache(symbol.upper().strip(), ignore_ttl=True) or []
+
+
+def get_news_with_meta(symbol: str) -> dict[str, Any]:
+    """Return {items, stale, has_cache} for API layer to expose freshness."""
+    items, is_stale = _read_cache_meta(symbol.upper().strip(), ignore_ttl=True)
+    if items is None:
+        return {"items": [], "stale": False, "has_cache": False}
+    return {"items": items, "stale": is_stale, "has_cache": True}
 
 
 def search_stock_insights(symbol: str) -> dict[str, Any]:

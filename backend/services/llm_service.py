@@ -3,10 +3,9 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session
-
 from backend.config import get_llm_config, get_llm_enabled, get_proxy_dict
-from backend.database.models import LLMCache, SessionLocal
+from backend.database.models import LLMCache
+from backend.database.deps import db_session
 
 
 def _get_client():
@@ -49,31 +48,24 @@ def _json_default(value: Any) -> Any:
 
 
 def _get_cached(symbol: str, prompt_hash: str) -> str | None:
-    db: Session = SessionLocal()
-    try:
+    with db_session() as db:
         row = db.query(LLMCache).filter(
             LLMCache.symbol == symbol,
             LLMCache.prompt_hash == prompt_hash,
         ).first()
         if row:
             return row.content
-    finally:
-        db.close()
     return None
 
 
 def _cache_result(symbol: str, prompt_hash: str, content: str) -> None:
-    db: Session = SessionLocal()
-    try:
+    with db_session() as db:
         db.add(LLMCache(symbol=symbol, prompt_hash=prompt_hash, content=content))
         db.commit()
-    finally:
-        db.close()
 
 
 def get_latest_summary(symbol: str) -> dict[str, Any]:
-    db: Session = SessionLocal()
-    try:
+    with db_session() as db:
         row = db.query(LLMCache).filter(
             LLMCache.symbol == symbol.upper().strip(),
         ).order_by(LLMCache.created_at.desc()).first()
@@ -86,8 +78,6 @@ def get_latest_summary(symbol: str) -> dict[str, Any]:
             "recommendation": _extract_recommendation(row.content),
             "created_at": row.created_at.isoformat() if row.created_at else "",
         }
-    finally:
-        db.close()
 
 
 def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +132,12 @@ def generate_summary(symbol: str, context: dict[str, Any]) -> dict[str, Any]:
             "truncated": getattr(choice, "finish_reason", "") == "length",
         }
     except Exception as e:
+        # Enqueue for background retry (deduped by ai_task.enqueue)
+        try:
+            from backend.services.ai_task import enqueue
+            enqueue(symbol)
+        except Exception:
+            pass
         return {"enabled": True, "summary": f"LLM分析出错: {str(e)}", "cached": False}
 
 

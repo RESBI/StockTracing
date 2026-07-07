@@ -4,11 +4,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from backend.config import DATA_DIR
+from backend.config import DATA_DIR, TTL
 from backend.services.crypto import discover_crypto
 
 DISCOVERY_CACHE = DATA_DIR / "exchange_stocks.json"
-DISCOVERY_TTL = 86400  # 24h
+DISCOVERY_TTL = TTL.DISCOVERY
 
 
 def _cached_discovery() -> dict | None:
@@ -77,8 +77,12 @@ def _fetch_bing_search(query: str, max_results: int = 20) -> list[str]:
 
 # === Comprehensive bundled fallback lists ===
 
+def _dedup(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
 def _bundled_sp500() -> list[str]:
-    return [
+    return _dedup([
         "AAPL","MSFT","GOOGL","AMZN","NVDA","META","BRK-B","TSLA","JPM","V",
         "UNH","JNJ","WMT","MA","PG","HD","CVX","XOM","LLY","ABBV","BAC","PFE","KO",
         "PEP","MRK","TMO","COST","AVGO","CSCO","ACN","ABT","DHR","CMCSA","NFLX",
@@ -108,11 +112,11 @@ def _bundled_sp500() -> list[str]:
         "NRG","PNW","DVA","FMC","BIO","HSIC","AAL","ALLE","RL","INCY","FOX",
         "UHS","XRAY","REG","UDR","FFIV","L","WDC","DXC","JBL","NWL","IPG","TPR",
         "HAS","EMN","AIZ","SEE","WHR",
-    ]
+    ])
 
 
 def _bundled_nasdaq100() -> list[str]:
-    return [
+    return _dedup([
         "AAPL","MSFT","AMZN","GOOGL","NVDA","META","AVGO","TSLA","COST","NFLX",
         "ADBE","PEP","AMD","CSCO","TMUS","INTC","QCOM","TXN","AMAT","INTU",
         "HON","CMCSA","ADP","SBUX","GILD","VRTX","MELI","LRCX","MU","ADI",
@@ -124,11 +128,11 @@ def _bundled_nasdaq100() -> list[str]:
         "NXPI","DDOG","TTD","ANSS","VRSK","CDW","GEHC","MDB","MAR","DASH",
         "SPLK","ZS","ON","TTWO","WDC","ULTA","OKTA","ZS","ZM","DOCU",
         "EBAY","VRSN","FOXA","FOX","SIRI","HST","UAL","AAL","LUV","DAL",
-    ]
+    ])
 
 
 def _bundled_csi300() -> list[str]:
-    return [
+    return _dedup([
         "600519.SS","000858.SZ","601318.SS","600036.SS","000333.SZ","601166.SS",
         "600900.SS","600887.SS","002415.SZ","601398.SS","600276.SS","601939.SS",
         "002714.SZ","300750.SZ","600030.SS","601668.SS","601288.SS","000001.SZ",
@@ -153,11 +157,11 @@ def _bundled_csi300() -> list[str]:
         "603160.SS","603986.SS","600703.SS","600588.SS","600522.SS","000977.SZ",
         "002049.SZ","603019.SS","600845.SS","300782.SZ","300308.SZ","688188.SS",
         "002916.SZ","300413.SZ","002709.SZ","300450.SZ","600183.SS","601698.SS",
-    ]
+    ])
 
 
 def _bundled_hsi() -> list[str]:
-    return [
+    return _dedup([
         "0005.HK","0011.HK","0016.HK","0027.HK","0066.HK","0101.HK","0168.HK",
         "0175.HK","0267.HK","0288.HK","0386.HK","0388.HK","0669.HK","0688.HK",
         "0700.HK","0762.HK","0823.HK","0857.HK","0883.HK","0939.HK","0941.HK",
@@ -172,11 +176,11 @@ def _bundled_hsi() -> list[str]:
         "1099.HK","1177.HK","1378.HK","1801.HK","1833.HK","2018.HK","2319.HK",
         "2382.HK","2689.HK","2883.HK","2899.HK","3320.HK","3888.HK","6185.HK",
         "6969.HK","9633.HK","9992.HK",
-    ]
+    ])
 
 
 def _bundled_nikkei() -> list[str]:
-    return [
+    return _dedup([
         "7203.T","6758.T","9984.T","6501.T","6367.T","9432.T","7974.T",
         "8035.T","6861.T","6954.T","4063.T","7735.T","8306.T","6098.T",
         "4568.T","4519.T","7741.T","8801.T","8058.T","4502.T","7267.T",
@@ -200,8 +204,7 @@ def _bundled_nikkei() -> list[str]:
         "7261.T","5101.T","6471.T","8053.T","7011.T","7832.T","9602.T",
         "6971.T","6841.T","6506.T","7731.T","7013.T","6448.T","6361.T",
         "3769.T","6370.T","7921.T","4751.T","4773.T","6440.T","6134.T",
-    ]
-
+    ])
 
 def discover_all_stocks(force_refresh: bool = False) -> dict[str, list[str]]:
     if not force_refresh:

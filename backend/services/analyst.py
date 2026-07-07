@@ -2,10 +2,11 @@ from typing import Any
 from datetime import datetime, timezone
 
 import yfinance as yf
-from sqlalchemy.orm import Session
 
-from backend.database.models import StockCache, AnalysisCache, SessionLocal
+from backend.database.models import StockCache, AnalysisCache
+from backend.database.deps import db_session
 from backend.config import CACHE_TTL_SECONDS
+from backend.utils.logger import logger
 
 
 def _safe_float(val: Any) -> float | None:
@@ -17,8 +18,7 @@ def _safe_float(val: Any) -> float | None:
 
 def _fetch_ratings(sym: str) -> dict:
     """Fetch recent ratings and upgrades, cached in AnalysisCache."""
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         existing = db.query(AnalysisCache).filter(
             AnalysisCache.symbol == sym,
             AnalysisCache.analysis_type == "analyst_ratings",
@@ -28,8 +28,6 @@ def _fetch_ratings(sym: str) -> dict:
             age = (datetime.now(timezone.utc) - updated).total_seconds()
             if age < CACHE_TTL_SECONDS:
                 return existing.data
-    finally:
-        db.close()
 
     result = {"recent_ratings": [], "upgrades_downgrades": []}
     try:
@@ -44,8 +42,8 @@ def _fetch_ratings(sym: str) -> dict:
                     "action": str(row.get("To Grade", "")),
                     "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("fetch recommendations failed for %s: %s", sym, e)
 
     try:
         ticker = yf.Ticker(sym)
@@ -60,39 +58,36 @@ def _fetch_ratings(sym: str) -> dict:
                     "action": str(row.get("Action", "")),
                     "date": str(row.name.date()) if hasattr(row.name, "date") else str(row.name),
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("fetch upgrades_downgrades failed for %s: %s", sym, e)
 
     # Save to cache
-    db = SessionLocal()
-    try:
-        existing = db.query(AnalysisCache).filter(
-            AnalysisCache.symbol == sym,
-            AnalysisCache.analysis_type == "analyst_ratings",
-        ).first()
-        now = datetime.now(timezone.utc)
-        if existing:
-            existing.data = result
-            existing.updated_at = now
-        else:
-            db.add(AnalysisCache(symbol=sym, analysis_type="analyst_ratings",
-                                 data=result, updated_at=now))
-        db.commit()
-    except Exception:
-        pass
-    finally:
-        db.close()
+    with db_session() as db:
+        try:
+            existing = db.query(AnalysisCache).filter(
+                AnalysisCache.symbol == sym,
+                AnalysisCache.analysis_type == "analyst_ratings",
+            ).first()
+            now = datetime.now(timezone.utc)
+            if existing:
+                existing.data = result
+                existing.updated_at = now
+            else:
+                db.add(AnalysisCache(symbol=sym, analysis_type="analyst_ratings",
+                                     data=result, updated_at=now))
+            db.commit()
+        except Exception as e:
+            logger.warning("save analyst_ratings cache failed for %s: %s", sym, e)
 
     return result
 
 
 def get_analyst_info(symbol: str) -> dict[str, Any]:
     sym = symbol.upper().strip()
-    db: Session = SessionLocal()
     ratings = {"recent_ratings": [], "upgrades_downgrades": []}
 
     # Try StockCache first
-    try:
+    with db_session() as db:
         existing = db.query(StockCache).filter(StockCache.symbol == sym).first()
         if existing and existing.updated_at:
             now = datetime.now(timezone.utc)
@@ -119,8 +114,6 @@ def get_analyst_info(symbol: str) -> dict[str, Any]:
                 result["recent_ratings"] = ratings["recent_ratings"]
                 result["upgrades_downgrades"] = ratings["upgrades_downgrades"]
                 return result
-    finally:
-        db.close()
 
     ticker = yf.Ticker(sym)
     info = ticker.info or {}

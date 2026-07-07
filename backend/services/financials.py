@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 import yfinance as yf
-from sqlalchemy.orm import Session
 
-from backend.database.models import FinancialCache, SessionLocal
+from backend.database.models import FinancialCache
+from backend.database.deps import db_session
 
 
 def _parse_financials(ticker: yf.Ticker) -> dict[str, list[dict]]:
@@ -58,8 +58,7 @@ def save_financials(symbol: str) -> None:
     sym = symbol.upper().strip()
     ticker = yf.Ticker(sym)
     data = _parse_financials(ticker)
-    db: Session = SessionLocal()
-    try:
+    with db_session() as db:
         now = datetime.now(timezone.utc)
         for report_type, items in data.items():
             if not items:
@@ -84,21 +83,18 @@ def save_financials(symbol: str) -> None:
                     updated_at=now,
                 ))
         db.commit()
-    finally:
-        db.close()
 
 
 def get_financials(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
     sym = symbol.upper().strip()
-    db: Session = SessionLocal()
-    try:
+    with db_session() as db:
         existing = db.query(FinancialCache).filter(FinancialCache.symbol == sym).first()
-        if not existing or force_refresh:
-            db.close()
-            save_financials(sym)
-            db = SessionLocal()
-            existing = db.query(FinancialCache).filter(FinancialCache.symbol == sym).first()
+        need_refresh = not existing or force_refresh
 
+    if need_refresh:
+        save_financials(sym)
+
+    with db_session() as db:
         result = {
             "income_statement": [],
             "balance_sheet": [],
@@ -112,5 +108,3 @@ def get_financials(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
             if r.report_type in result:
                 result[r.report_type].append(r.data)
         return result
-    finally:
-        db.close()

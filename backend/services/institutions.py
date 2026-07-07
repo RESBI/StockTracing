@@ -7,19 +7,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.config import DATA_DIR, get_proxy_dict
+from backend.config import DATA_DIR, TTL, get_proxy_dict, get_sec_user_agent
 from backend.services.institution_mapper import cached_cusip_mappings, resolve_by_issuer_names, resolve_cusips, resolve_ticker_sectors, resolve_tickers
 from backend.services.institution_normalizer import normalize_holdings
+from backend.utils.circuit_breaker import circuit
 
 
 HOLDINGS_FILE = DATA_DIR / "institution_holdings.json"
 VISIBLE_CACHE_FILE = DATA_DIR / "institution_visible_cache.json"
 HISTORY_DIR = DATA_DIR / "institution_holdings_history"
-REFRESH_INTERVAL_SECONDS = 8 * 60 * 60
-SEC_HEADERS = {
-    "User-Agent": "StockTracing/1.0 contact@example.com",
-    "Accept-Encoding": "gzip, deflate",
-}
+REFRESH_INTERVAL_SECONDS = TTL.INSTITUTIONS
+
+
+def _sec_headers() -> dict[str, str]:
+    return {
+        "User-Agent": get_sec_user_agent(),
+        "Accept-Encoding": "gzip, deflate",
+    }
 
 
 SEC_INSTITUTIONS = [
@@ -98,7 +102,7 @@ def _needs_refresh() -> bool:
 def _http_get(url: str, timeout: int = 15) -> Any:
     import requests
 
-    r = requests.get(url, timeout=timeout, headers=SEC_HEADERS, proxies=get_proxy_dict())
+    r = requests.get(url, timeout=timeout, headers=_sec_headers(), proxies=get_proxy_dict())
     r.raise_for_status()
     content_type = r.headers.get("content-type", "")
     if "json" in content_type or url.endswith(".json"):
@@ -190,6 +194,7 @@ def _previous_holdings_by_id() -> dict[str, dict[str, dict[str, Any]]]:
     return result
 
 
+@circuit("sec", failure_threshold=3, recovery_timeout=300)
 def fetch_sec_13f_holdings() -> dict[str, Any]:
     previous = _previous_holdings_by_id()
     institutions = []

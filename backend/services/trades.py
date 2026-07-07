@@ -22,10 +22,10 @@ def _save(trades: list[dict]) -> None:
 
 
 def get_all_trades() -> list[dict]:
-    from backend.database.models import StockCache, SessionLocal
+    from backend.database.models import StockCache
+    from backend.database.deps import db_session
     trades = _load()
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         for t in trades:
             if t.get("status") == "open":
                 sym = t.get("symbol", "")
@@ -41,8 +41,6 @@ def get_all_trades() -> list[dict]:
                         t["_unrealized"] = round((cur_p - open_p) * qty, 2)
                     else:
                         t["_unrealized"] = round((open_p - cur_p) * qty, 2)
-    finally:
-        db.close()
     return trades
 
 
@@ -100,7 +98,8 @@ def delete_trade(trade_id: str) -> bool:
 
 
 def get_trade_stats() -> dict[str, Any]:
-    from backend.database.models import StockCache, SessionLocal
+    from backend.database.models import StockCache
+    from backend.database.deps import db_session
     trades = _load()
     total = len(trades)
     open_positions = [t for t in trades if t.get("status") == "open"]
@@ -127,8 +126,7 @@ def get_trade_stats() -> dict[str, Any]:
 
     # Unrealized P&L for open positions
     unrealized_pnl = 0.0
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         for t in open_positions:
             open_p = t.get("open_price")
             qty = t.get("quantity", 0) or 0
@@ -142,8 +140,6 @@ def get_trade_stats() -> dict[str, Any]:
                     unrealized_pnl += (sc.current_price - open_p) * qty
                 else:
                     unrealized_pnl += (open_p - sc.current_price) * qty
-    finally:
-        db.close()
 
     return {
         "total": total,
@@ -158,83 +154,82 @@ def get_trade_stats() -> dict[str, Any]:
 
 
 def get_portfolio(interval: str = "1d", range_key: str = "all") -> dict[str, Any]:
-    from backend.database.models import StockCache, SessionLocal
+    from backend.database.models import StockCache
+    from backend.database.deps import db_session
     from collections import defaultdict
     trades = _load()
-    db = SessionLocal()
+    with db_session() as db:
+        # Merge holdings by symbol (weighted average cost)
+        merged = {}
+        total_value = 0.0
+        sector_map = defaultdict(float)
+        for t in trades:
+            sym = t.get("symbol", "").upper()
+            open_p = t.get("open_price")
+            qty = t.get("quantity", 0) or 0
+            direction = t.get("direction", "long")
+            is_open = t.get("status") == "open"
 
-    # Merge holdings by symbol (weighted average cost)
-    merged = {}
-    total_value = 0.0
-    sector_map = defaultdict(float)
-    for t in trades:
-        sym = t.get("symbol", "").upper()
-        open_p = t.get("open_price")
-        qty = t.get("quantity", 0) or 0
-        direction = t.get("direction", "long")
-        is_open = t.get("status") == "open"
+            sc = db.query(StockCache).filter(StockCache.symbol == sym).first()
+            cur_p = sc.current_price if sc else None
+            sector = (sc.sector or "未知") if sc else "未知"
 
-        sc = db.query(StockCache).filter(StockCache.symbol == sym).first()
-        cur_p = sc.current_price if sc else None
-        sector = (sc.sector or "未知") if sc else "未知"
+            if not is_open or not open_p or not cur_p:
+                continue
 
-        if not is_open or not open_p or not cur_p:
-            continue
+            key = sym
+            if key not in merged:
+                merged[key] = {"symbol": sym, "direction": direction, "total_qty": 0, "total_cost": 0.0, "cur_p": cur_p, "sector": sector}
+            m = merged[key]
+            m["total_qty"] += qty
+            m["total_cost"] += open_p * qty
 
-        key = sym
-        if key not in merged:
-            merged[key] = {"symbol": sym, "direction": direction, "total_qty": 0, "total_cost": 0.0, "cur_p": cur_p, "sector": sector}
-        m = merged[key]
-        m["total_qty"] += qty
-        m["total_cost"] += open_p * qty
+        holdings = []
+        total_cost = 0.0
+        for sym, m in merged.items():
+            avg_price = m["total_cost"] / m["total_qty"] if m["total_qty"] > 0 else 0
+            total_cost += m["total_cost"]
+            cur_p = m["cur_p"]
+            direction = m["direction"]
+            qty = m["total_qty"]
+            if direction == "long":
+                pnl = (cur_p - avg_price) * qty
+                pnl_pct = (cur_p - avg_price) / avg_price * 100 if avg_price > 0 else 0
+            else:
+                pnl = (avg_price - cur_p) * qty
+                pnl_pct = (avg_price - cur_p) / cur_p * 100 if cur_p > 0 else 0
+            value = cur_p * qty
+            total_value += value
+            sector_map[m["sector"]] += value
+            holdings.append({
+                "symbol": sym,
+                "direction": direction,
+                "quantity": qty,
+                "open_price": round(avg_price, 2),
+                "current_price": cur_p,
+                "pnl": round(pnl, 2),
+                "pnl_pct": round(pnl_pct, 2),
+                "value": round(value, 2),
+                "sector": m["sector"],
+            })
 
-    holdings = []
-    total_cost = 0.0
-    for sym, m in merged.items():
-        avg_price = m["total_cost"] / m["total_qty"] if m["total_qty"] > 0 else 0
-        total_cost += m["total_cost"]
-        cur_p = m["cur_p"]
-        direction = m["direction"]
-        qty = m["total_qty"]
-        if direction == "long":
-            pnl = (cur_p - avg_price) * qty
-            pnl_pct = (cur_p - avg_price) / avg_price * 100 if avg_price > 0 else 0
-        else:
-            pnl = (avg_price - cur_p) * qty
-            pnl_pct = (avg_price - cur_p) / cur_p * 100 if cur_p > 0 else 0
-        value = cur_p * qty
-        total_value += value
-        sector_map[m["sector"]] += value
-        holdings.append({
-            "symbol": sym,
-            "direction": direction,
-            "quantity": qty,
-            "open_price": round(avg_price, 2),
-            "current_price": cur_p,
-            "pnl": round(pnl, 2),
-            "pnl_pct": round(pnl_pct, 2),
-            "value": round(value, 2),
-            "sector": m["sector"],
-        })
+        # P&L curve data
+        pnl_curve = _compute_pnl_curve(db, interval, range_key)
 
-    # P&L curve data
-    pnl_curve = _compute_pnl_curve(db, interval, range_key)
-    db.close()
+        # Symbol pie
+        symbol_pie = [{"name": h["symbol"], "value": round(h["value"], 2)} for h in holdings]
 
-    # Symbol pie
-    symbol_pie = [{"name": h["symbol"], "value": round(h["value"], 2)} for h in holdings]
+        # Sector pie
+        sector_pie = [{"name": k, "value": round(v, 2)} for k, v in sector_map.items()]
 
-    # Sector pie
-    sector_pie = [{"name": k, "value": round(v, 2)} for k, v in sector_map.items()]
-
-    return {
-        "holdings": holdings,
-        "total_cost": round(total_cost, 2),
-        "total_value": round(total_value, 2),
-        "symbol_pie": symbol_pie,
-        "sector_pie": sector_pie,
-        "pnl_curve": pnl_curve,
-    }
+        return {
+            "holdings": holdings,
+            "total_cost": round(total_cost, 2),
+            "total_value": round(total_value, 2),
+            "symbol_pie": symbol_pie,
+            "sector_pie": sector_pie,
+            "pnl_curve": pnl_curve,
+        }
 
 
 def _compute_pnl_curve(db, interval: str = "1d", range_key: str = "all") -> list[dict]:

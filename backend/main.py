@@ -9,7 +9,9 @@ from typing import Any
 from backend.routers import stock, pages
 from backend.database.models import Base, engine
 from backend.utils.proxy import setup_proxy
+from backend.utils.logger import logger
 from backend.services.cache_updater import get_updater
+from backend.config import DEBUG
 
 Base.metadata.create_all(bind=engine)
 setup_proxy()
@@ -51,7 +53,9 @@ app.include_router(pages.router)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
+    detail = str(exc) if DEBUG else "内部服务器错误"
     return SafeJSONResponse(
         status_code=500,
-        content={"detail": str(exc)},
+        content={"detail": detail},
     )

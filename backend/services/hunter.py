@@ -1,12 +1,8 @@
-import json
-from datetime import datetime, timezone
 from typing import Any
 
-from backend.config import DATA_DIR
-from backend.database.models import SessionLocal, StockCache, FinancialCache, AnalysisCache
+from backend.database.models import StockCache, AnalysisCache
+from backend.database.deps import db_session
 from backend.services.discovery import discover_all_stocks
-
-UNIVERSE_FILE = DATA_DIR / "stock_universe.json"
 
 
 def get_markets() -> list[str]:
@@ -21,8 +17,7 @@ def get_sectors(market: str) -> list[str]:
     if not symbols:
         return ["全部"]
 
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         rows = db.query(StockCache.sector).filter(
             StockCache.symbol.in_([s.upper().replace('-', '.') for s in symbols])
         ).distinct().all()
@@ -32,8 +27,6 @@ def get_sectors(market: str) -> list[str]:
         else:
             secs = ["全部"]
         return secs
-    finally:
-        db.close()
 
 
 def get_symbols(market: str, sector: str) -> list[str]:
@@ -49,20 +42,16 @@ def get_symbols(market: str, sector: str) -> list[str]:
     if sector == "全部":
         return unique
 
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         rows = db.query(StockCache.symbol).filter(
             StockCache.symbol.in_([s.upper().replace('-', '.') for s in unique]),
             StockCache.sector == sector,
         ).all()
         return list(dict.fromkeys([r[0] for r in rows]))
-    finally:
-        db.close()
 
 
 def score_stock(symbol: str) -> dict[str, Any] | None:
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         sc = db.query(StockCache).filter(StockCache.symbol == symbol.upper()).first()
         if not sc or sc.current_price is None or sc.current_price <= 0:
             return None
@@ -165,8 +154,6 @@ def score_stock(symbol: str) -> dict[str, Any] | None:
                 "financial": {"score": fin_score, "max": 20, "details": fin_details},
             },
         }
-    finally:
-        db.close()
 
 
 def hunt(market: str, sector: str) -> dict[str, Any]:

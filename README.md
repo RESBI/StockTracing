@@ -17,7 +17,7 @@ python run.py
 
 ## 配置
 
-编辑 `data/config.json`。
+编辑 `data/config.json`，或通过环境变量覆盖（环境变量优先级更高，便于容器化部署）。
 
 LLM 配置：
 
@@ -43,7 +43,32 @@ LLM 配置：
 }
 ```
 
+SEC User-Agent 配置（SEC EDGAR 要求真实联系方式）：
+
+```json
+{
+    "sec": {
+        "user_agent": "YourApp/1.0 your@email.com"
+    }
+}
+```
+
 如果 `https` 为空，系统会复用 `http` 代理。
+
+### 环境变量
+
+以下环境变量覆盖 `config.json`，无需修改文件即可调整配置：
+
+| 环境变量 | 作用 |
+|---|---|
+| `ST_LLM_API_KEY` | LLM API Key |
+| `ST_LLM_MODEL` | LLM 模型名 |
+| `ST_LLM_BASE_URL` | LLM API Base URL |
+| `ST_PROXY_ENABLED` | 启用代理（`1`/`true`） |
+| `ST_PROXY_HTTP` | HTTP 代理地址 |
+| `ST_PROXY_HTTPS` | HTTPS 代理地址 |
+| `ST_SEC_UA` | SEC 请求 User-Agent |
+| `ST_DEBUG` | 调试模式（`1` 暴露异常详情） |
 
 ## 功能概览
 
@@ -116,16 +141,24 @@ LLM 配置：
 StockTracing/
 ├── run.py
 ├── requirements.txt
+├── README.md
+├── ARCHITECTURE.md            # 架构文档
+├── OPTIMIZATION.md            # 优化设计文档
+├── LICENSE
 ├── backend/
 │   ├── main.py
-│   ├── config.py
+│   ├── config.py              # 配置、TTL、重试、环境变量
 │   ├── database/
-│   │   └── models.py
+│   │   ├── models.py          # SQLAlchemy 模型
+│   │   └── deps.py            # get_db 依赖 + db_session 上下文管理器
 │   ├── routers/
 │   │   ├── pages.py
 │   │   └── stock.py
+│   ├── schemas/
+│   │   └── __init__.py        # Pydantic 请求模型
 │   ├── services/
 │   │   ├── ai_context.py
+│   │   ├── ai_task.py         # AI 持久化任务队列
 │   │   ├── analyst.py
 │   │   ├── cache_updater.py
 │   │   ├── crypto.py
@@ -138,9 +171,12 @@ StockTracing/
 │   │   ├── llm_service.py
 │   │   ├── news_service.py
 │   │   ├── stock_data.py
+│   │   ├── symbol_resolver.py # 标的符号解析（加密/A股/常规）
 │   │   ├── technical.py
 │   │   └── trades.py
 │   └── utils/
+│       ├── circuit_breaker.py # 熔断器
+│       ├── logger.py          # 日志
 │       ├── proxy.py
 │       └── watchlist.py
 ├── frontend/
@@ -153,12 +189,22 @@ StockTracing/
 │       ├── scan.html
 │       ├── stock_detail.html
 │       └── trades.html
+├── tests/                     # 单元测试（pytest）
+│   ├── conftest.py
+│   ├── test_technical.py
+│   ├── test_institution_normalizer.py
+│   ├── test_hunter.py
+│   └── test_trades.py
+├── scripts/
+│   └── migrate_unique_constraints.py  # 数据库迁移脚本
+├── images/                    # 演示资源
 └── data/
     ├── config.json
     ├── watchlist.json
     ├── trades.json
     ├── stocktracing.db
     ├── news_cache/
+    ├── logs/                  # 运行日志
     ├── institution_holdings.json
     ├── institution_visible_cache.json
     ├── institution_holdings_history/
@@ -166,14 +212,35 @@ StockTracing/
     ├── sec_ticker_cache.json
     ├── sec_ticker_exchange_cache.json
     ├── nasdaq_directory_cache.json
-    └── ticker_sector_cache.json
+    ├── ticker_sector_cache.json
+    └── exchange_stocks.json
 ```
 
 ## 项目实现
 
-项目采用 FastAPI 单体后端 + Jinja2 模板前端。页面路由由 `backend/routers/pages.py` 管理，REST API 由 `backend/routers/stock.py` 管理，核心业务逻辑集中在 `backend/services/`。运行数据主要保存在 `data/`，其中 SQLite 用于行情、分析、财报、AI 和扫描历史缓存，JSON 文件用于配置、自选、交易记录和机构持仓专题数据。
+项目采用 FastAPI 单体后端 + Jinja2 模板前端。页面路由由 `backend/routers/pages.py` 管理，REST API 由 `backend/routers/stock.py` 管理，核心业务逻辑集中在 `backend/services/`。运行数据主要保存在 `data/`，其中 SQLite 用于行情、分析、财报、AI、狩猎历史和 AI 任务队列，JSON 文件用于配置、自选、交易记录和机构持仓专题数据。
 
-详细架构、数据流和模块说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+关键工程特性：
+
+- **DB 会话管理**：`database/deps.py` 提供 `get_db`（FastAPI 依赖）和 `db_session`（上下文管理器），统一关闭。
+- **缓存策略**：TTL 集中定义于 `config.TTL`，外部源调用经熔断器保护（`utils/circuit_breaker.py`）。
+- **AI 任务队列**：`ai_task` 表持久化 AI 生成任务，重启不丢失，失败自动重试。
+- **日志**：`utils/logger.py` 输出到 `data/logs/stocktracing.log` 与控制台。
+- **输入校验**：`schemas/` 用 Pydantic 模型校验请求体。
+
+## 测试
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+覆盖技术指标信号、机构持仓标准化、狩猎评分、交易盈亏计算等核心逻辑。
+
+## 文档
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)：架构、数据流、模块职责与存储模型。
+- [OPTIMIZATION.md](OPTIMIZATION.md)：架构优化设计与迁移路径。
 
 ## 免责声明
 

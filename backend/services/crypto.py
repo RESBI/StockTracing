@@ -348,7 +348,19 @@ def get_crypto_indicators(symbol: str) -> dict[str, Any] | None:
 
     latest_close = float(closes[-1])
     result["latest_price"] = round(latest_close, 4)
-    result["signals"] = _generate_signals(result, closes, volumes, latest_close, result["rsi"], np.array(result["macd"]["histogram"]), stoch_k, np.array(result["bollinger"]["upper"]), np.array(result["bollinger"]["lower"]), sma_short, sma_long)
+
+    def _to_nan_arr(lst):
+        return np.array([np.nan if x is None else x for x in lst], dtype=float)
+
+    result["signals"] = _generate_signals(
+        result, closes, volumes, latest_close,
+        _to_nan_arr(result["rsi"]),
+        _to_nan_arr(result["macd"]["histogram"]),
+        stoch_k,
+        _to_nan_arr(result["bollinger"]["upper"]),
+        _to_nan_arr(result["bollinger"]["lower"]),
+        sma_short, sma_long,
+    )
 
     return result
 

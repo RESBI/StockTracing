@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, JSON, Text
+from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, JSON, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 from backend.config import DATABASE_URL
@@ -39,6 +39,9 @@ class StockCache(Base):
 
 class FinancialCache(Base):
     __tablename__ = "financial_cache"
+    __table_args__ = (
+        UniqueConstraint("symbol", "report_type", "fiscal_year", "fiscal_quarter", name="uq_financial_key"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String(20), index=True)
@@ -51,6 +54,9 @@ class FinancialCache(Base):
 
 class AnalysisCache(Base):
     __tablename__ = "analysis_cache"
+    __table_args__ = (
+        UniqueConstraint("symbol", "analysis_type", name="uq_analysis_key"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String(20), index=True)
@@ -80,4 +86,16 @@ class HuntSession(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
-Base.metadata.create_all(bind=engine)
+class AITask(Base):
+    """Persistent AI generation queue. Survives restarts, supports retry."""
+    __tablename__ = "ai_task"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), index=True)
+    status = Column(String(20), default="pending", index=True)  # pending/running/done/failed
+    attempts = Column(Integer, default=0)
+    max_attempts = Column(Integer, default=3)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    scheduled_for = Column(DateTime, nullable=True)

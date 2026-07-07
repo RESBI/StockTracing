@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from backend.services.stock_data import get_stock_info, get_stock_history, search_stocks, get_tick, _resolve_asymbol
+from backend.services.stock_data import get_stock_info, get_stock_history, search_stocks, get_tick
 from backend.services.financials import get_financials
 from backend.services.analyst import get_analyst_info
 from backend.services.technical import calculate_all_indicators, get_period_analysis
@@ -12,42 +12,25 @@ from backend.services.news_service import get_cached_stock_news, get_stock_news,
 from backend.services.hunter import hunt, get_markets, get_sectors
 from backend.services.discovery import discover_all_stocks
 from backend.services.cache_updater import get_updater
+from backend.services.ai_task import enqueue as enqueue_ai, queue_status as ai_queue_status
+from backend.utils.circuit_breaker import circuit_status
 from backend.services.trades import (
     get_all_trades, get_trade, create_trade, update_trade, 
     delete_trade, get_trade_stats, get_portfolio
 )
-from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, get_crypto_periods, CRYPTO_SYMBOLS
+from backend.services.crypto import get_crypto_info, get_crypto_history, get_crypto_tick, get_crypto_indicators, get_crypto_periods
+from backend.services.symbol_resolver import is_crypto as _is_crypto, crypto_sym as _crypto_sym, resolve_sym as _resolve_sym
 from backend.services.institutions import get_institutions, get_institution, get_institution_history, get_institution_history_detail, warm_institution_mappings
 
 
-def _is_crypto(symbol: str) -> bool:
-    s = symbol.upper().strip()
-    if s.startswith("CRYPTO:"):
-        return True
-    if "-USDT" in s or "-USD" in s:
-        return True
-    return any(s == c.split("-")[0] or s == c for c in CRYPTO_SYMBOLS)
-
-
-def _crypto_sym(symbol: str) -> str:
-    """Strip CRYPTO: prefix, return clean trading pair."""
-    s = symbol.upper().strip()
-    if s.startswith("CRYPTO:"):
-        s = s[7:]
-    if not ("-" in s):
-        s = s + "-USDT"
-    return s
 from backend.utils.watchlist import load_watchlist, add_to_watchlist, remove_from_watchlist
-from backend.database.models import LLMCache, SessionLocal, HuntSession
+from backend.database.models import LLMCache, HuntSession
+from backend.database.deps import db_session
 from backend.config import _load_json_config, save_json_config, CONFIG_FILE
+from backend.schemas import TradeCreate, TradeUpdate, ConfigUpdate, TicksRequest
 
 router = APIRouter(prefix="/api", tags=["api"])
 templates = Jinja2Templates(directory="frontend/templates")
-
-
-def _resolve_sym(symbol: str) -> str:
-    r = _resolve_asymbol(symbol)
-    return r if r else symbol.upper().strip()
 
 
 @router.get("/stock/{symbol}")
@@ -73,6 +56,24 @@ def api_tick(symbol: str):
         return get_tick(symbol)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/ticks")
+def api_ticks(body: TicksRequest):
+    """Batch tick endpoint. Reduces N HTTP requests to 1 for dashboard polling."""
+    symbols = body.symbols
+    ticks = {}
+    for sym in symbols:
+        try:
+            if _is_crypto(sym):
+                t = get_crypto_tick(_crypto_sym(sym))
+                if t:
+                    ticks[sym] = t
+            else:
+                ticks[sym] = get_tick(sym)
+        except Exception:
+            ticks[sym] = {"symbol": sym, "price": None}
+    return {"ticks": ticks}
 
 
 @router.get("/stock/{symbol}/history")
@@ -147,7 +148,8 @@ def api_summary(symbol: str, refresh: bool = True):
 
 
 @router.get("/stock/{symbol}/summary/latest")
-def api_latest_summary(symbol: str):
+def api_latest_summary(symbol: str, response: Response):
+    response.headers["Cache-Control"] = "public, max-age=60"
     return get_latest_summary(_resolve_sym(symbol))
 
 
@@ -188,42 +190,39 @@ def api_full_analysis(symbol: str, refresh: bool = False):
     sym = _resolve_sym(symbol)
     result = {}
 
-    try:
-        result["info"] = get_stock_info(sym, force_refresh=refresh)
-    except Exception as e:
-        result["info"] = {"symbol": sym, "name": "获取失败", "error": str(e)}
+    from concurrent.futures import ThreadPoolExecutor
 
-    try:
-        result["history"] = get_stock_history(sym)[-90:]
-    except Exception:
-        result["history"] = []
+    def _safe(fn, default):
+        try:
+            return fn()
+        except Exception:
+            return default
 
-    try:
-        result["analyst"] = get_analyst_info(sym)
-    except Exception:
-        result["analyst"] = {}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        f_info = ex.submit(_safe, lambda: get_stock_info(sym, force_refresh=refresh), {"symbol": sym, "name": "获取失败"})
+        f_history = ex.submit(_safe, lambda: get_stock_history(sym)[-90:], [])
+        f_analyst = ex.submit(_safe, lambda: get_analyst_info(sym), {})
+        f_fin = ex.submit(_safe, lambda: get_financials(sym, force_refresh=refresh), {})
+        f_periods = ex.submit(_safe, lambda: get_period_analysis(sym), {"changes": {}, "signals": {}})
+        f_tech = ex.submit(_safe, lambda: calculate_all_indicators(sym), None)
 
-    try:
-        result["financials"] = get_financials(sym, force_refresh=refresh)
-    except Exception:
-        result["financials"] = {}
+        result["info"] = f_info.result()
+        result["history"] = f_history.result()
+        result["analyst"] = f_analyst.result()
+        result["financials"] = f_fin.result()
+        result["periods"] = f_periods.result()
 
-    try:
-        tech = calculate_all_indicators(sym)
-        result["technical"] = {
-            "latest_price": tech.get("latest_price"),
-            "signals": tech.get("signals"),
-            "rsi": tech.get("rsi", [])[-1] if tech.get("rsi") else None,
-            "macd": {k: v[-1] if v else None for k, v in tech.get("macd", {}).items()},
-            "bollinger": {k: v[-1] if v else None for k, v in tech.get("bollinger", {}).items()},
-        }
-    except Exception:
-        result["technical"] = {"latest_price": None, "signals": []}
-
-    try:
-        result["periods"] = get_period_analysis(sym)
-    except Exception:
-        result["periods"] = {"changes": {}, "signals": {}}
+        tech = f_tech.result()
+        if tech:
+            result["technical"] = {
+                "latest_price": tech.get("latest_price"),
+                "signals": tech.get("signals"),
+                "rsi": tech.get("rsi", [])[-1] if tech.get("rsi") else None,
+                "macd": {k: v[-1] if v else None for k, v in tech.get("macd", {}).items()},
+                "bollinger": {k: v[-1] if v else None for k, v in tech.get("bollinger", {}).items()},
+            }
+        else:
+            result["technical"] = {"latest_price": None, "signals": []}
 
     result["summary"] = get_latest_summary(sym)
 
@@ -265,11 +264,16 @@ def api_get_config():
 
 
 @router.put("/config")
-def api_update_config(body: dict):
+def api_update_config(body: ConfigUpdate):
     current = _load_json_config()
-    for section in ("llm", "proxy"):
-        if section in body and isinstance(body[section], dict):
-            current.setdefault(section, {}).update(body[section])
+    for section in ("llm", "proxy", "sec"):
+        section_data = getattr(body, section, None)
+        if section_data and isinstance(section_data, dict):
+            for k, v in section_data.items():
+                # Ignore masked api_key values to avoid overwriting the real key
+                if section == "llm" and k == "api_key" and isinstance(v, str) and "****" in v:
+                    continue
+                current.setdefault(section, {})[k] = v
     save_json_config(current)
     from backend.utils.proxy import setup_proxy
     setup_proxy()
@@ -277,10 +281,10 @@ def api_update_config(body: dict):
 
 
 @router.get("/stock/{symbol}/ai-history")
-def api_ai_history(symbol: str):
+def api_ai_history(symbol: str, response: Response):
+    response.headers["Cache-Control"] = "public, max-age=120"
     sym = _resolve_sym(symbol).upper().strip()
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         rows = db.query(LLMCache).filter(
             LLMCache.symbol == sym
         ).order_by(LLMCache.created_at.desc()).limit(10).all()
@@ -289,8 +293,25 @@ def api_ai_history(symbol: str):
             "created_at": r.created_at.isoformat() if r.created_at else "",
             "content": r.content,
         } for r in rows]
-    finally:
-        db.close()
+
+
+@router.get("/ai/queue")
+def api_ai_queue():
+    """Observe AI task queue status."""
+    return ai_queue_status()
+
+
+@router.post("/ai/queue/{symbol}")
+def api_ai_enqueue(symbol: str):
+    """Manually enqueue a symbol for AI generation."""
+    enqueue_ai(_resolve_sym(symbol))
+    return {"status": "ok"}
+
+
+@router.get("/circuits")
+def api_circuits():
+    """Observe circuit breaker states."""
+    return circuit_status()
 
 
 # ---------- Hunting ----------
@@ -314,8 +335,7 @@ def api_hunt_run(market: str, sector: str):
 
     result = hunt(market, sector)
     # Save to history
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         session = HuntSession(
             market=market,
             sector=sector,
@@ -325,15 +345,13 @@ def api_hunt_run(market: str, sector: str):
         db.add(session)
         db.commit()
         result["created_at"] = session.created_at.isoformat() if session.created_at else ""
-    finally:
-        db.close()
     return result
 
 
 @router.get("/hunt/history")
-def api_hunt_history():
-    db = SessionLocal()
-    try:
+def api_hunt_history(response: Response):
+    response.headers["Cache-Control"] = "public, max-age=120"
+    with db_session() as db:
         rows = db.query(HuntSession).order_by(HuntSession.created_at.desc()).limit(20).all()
         return [{
             "id": r.id,
@@ -342,20 +360,15 @@ def api_hunt_history():
             "total": r.total,
             "created_at": r.created_at.isoformat() if r.created_at else "",
         } for r in rows]
-    finally:
-        db.close()
 
 
 @router.get("/hunt/history/{session_id}")
 def api_hunt_session_detail(session_id: int):
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         row = db.query(HuntSession).filter(HuntSession.id == session_id).first()
         if not row:
             raise HTTPException(status_code=404)
         return row.data
-    finally:
-        db.close()
 
 
 # ---------- Trading Journal ----------
@@ -381,7 +394,8 @@ def api_institutions(refresh: bool = False):
 
 
 @router.get("/institutions/history")
-def api_institution_history():
+def api_institution_history(response: Response):
+    response.headers["Cache-Control"] = "public, max-age=300"
     return {"history": get_institution_history()}
 
 
@@ -407,13 +421,13 @@ def api_institution_detail(institution_id: str):
 
 
 @router.post("/trades")
-def api_create_trade(body: dict):
-    return create_trade(body)
+def api_create_trade(body: TradeCreate):
+    return create_trade(body.model_dump())
 
 
 @router.put("/trades/{trade_id}")
-def api_update_trade(trade_id: str, body: dict):
-    result = update_trade(trade_id, body)
+def api_update_trade(trade_id: str, body: TradeUpdate):
+    result = update_trade(trade_id, body.model_dump(exclude_unset=True))
     if not result:
         raise HTTPException(status_code=404, detail="交易记录不存在")
     return result
